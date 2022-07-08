@@ -16,29 +16,34 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 
 ## How to use it:
 
-`node --es-module-specifier-resolution=node example.js`
+Go into test/index.js and change:
+- All refrences to tailville.xyz to whatever you want
+- ip: to your server ip (GeyserMC has to be installed on java!!!)
+- port: to your server's port (You probably won't have to change it)
 
-Set `type` to `module` in your `package.json`.
+Then do `node test` and follow the steps in terminal to start the tool.
+
+Here's a graph of stuff to change:
 
 ```js
 import { Session } from "friend-connect";
 import auth from "prismarine-auth";
 
 const { Authflow, Titles } = auth;
-const token = await new Authflow("friend-connect", "./", {
+const token = await new Authflow("friend-connect", "./", { //change friend-connect to whatever
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
 }).getXboxToken();
 
 new Session(
 	{
-		hostName: "friend-connect",
-		worldName: "Fun Fact: friend-connect was revealed 7/7/2022",
+		hostName: "friend-connect", //change to whatever
+		worldName: "Fun Fact: friend-connect was revealed 7/7/2022", //change to what you want the MOTD to be, basically
 		version: "1.19.2",
 		protocol: 527,
 		players: 0,
 		maxPlayers: 20,
-		ip: "", // put your ip here
+		ip: "", // put your server ip / domain here
 		port: 19132,
 	},
 	token
