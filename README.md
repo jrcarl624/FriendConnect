@@ -16,6 +16,8 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 
 ## How to use it:
 
+`node --es-module-specifier-resolution=node example.js`
+
 ```js
 const { Authflow, Titles } = require("prismarine-auth");
 const { Session } = require("friend-connect");
@@ -50,6 +52,8 @@ new Authflow("FriendConnect", "./", {
 -   [ ] Add the ability to provide an array of strings to be chosen from for the hostName and worldName that is rotated through on session Update.
 -   [ ] Check if the user owns any games if so send an error telling them to use an alt account.
 -   [ ] Add an option to disable auto friending.
+-   [ ] Make a user friendly way to use this tool like a discord bot or something.
+-   [ ]
 
 ## Credit
 
