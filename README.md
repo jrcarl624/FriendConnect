@@ -44,8 +44,8 @@ new Authflow("TailvileMC", "./", {
 
 ## Credit
 
-This project is a js port of the [rtm516/MCXboxBroadcast](https://github.com/rtm516/MCXboxBroadcast).
+This project is a js port of the [rtm516/MCXboxBroadcast](https://github.com/rtm516/MCXboxBroadcast) from java.
 
-This port adds a key feature that makes the friending automated.
+Friend Connect adds a key feature that makes the friending automated.
 
-I worked with [rtm516](https://github.com/rtm516) to figure out the uris for finding the followers of an xbox profile and friending people. After I tested the uris, He implemented the friending feature into his project.
+I worked with [rtm516](https://github.com/rtm516) to figure out the uri and headers for finding the followers of an xbox profile.
