@@ -4,6 +4,7 @@ const { w3cwebsocket: W3CWebSocket } = wspkg;
 import events from "events";
 import https from "https";
 import crypto from "crypto";
+import { ping } from "bedrock-protocol";
 
 const Constants = {
 	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
@@ -25,6 +26,7 @@ interface SessionInfoOptions {
 	maxPlayers: number;
 	ip: string;
 	port: number;
+	log?: boolean;
 }
 
 interface Connection {
@@ -212,16 +214,16 @@ class Session extends events.EventEmitter {
 			ws.send(
 				'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
 			);
-			console.log("WebSocket Client Connected");
+			if(options.log) console.log("WebSocket Client Connected");
 		};
 		ws.onclose = () => {
-			console.log("WebSocket Client Closed");
-			console.log("Restarting...");
+			if(options.log) console.log("WebSocket Client Closed");
+			if(options.log) console.log("Restarting...");
 			new Session(options, token);
 		};
 
 		ws.onmessage = (event) => {
-			console.log(event.data);
+			if(options.log) console.log(event.data);
 			switch (typeof event.data) {
 				case "string":
 					const data = JSON.parse(event.data);
@@ -230,7 +232,7 @@ class Session extends events.EventEmitter {
 						this.SessionInfo.connectionId = data[4].ConnectionId;
 						this.emit("connectionId");
 					} else {
-						console.log(
+						if(options.log) console.log(
 							"----------------------------------- Start of RTA WS Message\n",
 							event.data,
 							"\n----------------------------------- End of RTA WS Message"
@@ -245,7 +247,7 @@ class Session extends events.EventEmitter {
 		});
 		this.on("sessionUpdated", () => {
 			if (!this.sessionStarted) {
-				console.log(
+				if(options.log) console.log(
 					"----------------------------------- Start of Handle Request"
 				);
 				var createHandleRequestOptions = {
@@ -291,13 +293,13 @@ class Session extends events.EventEmitter {
 			}
 		});
 		this.on("sessionStarted", () => {
-			console.log("Session started");
+			if(options.log) console.log("Session started");
 
 			setInterval(() => {
 				this.updateSession(this.SessionInfo);
 			}, 30000);
 			setInterval(() => {
-				console.log("Friend Interval");
+				if(options.log) console.log("Friend Interval");
 				let request = https.request(
 					Constants.PEOPLE_HUB + "/followers",
 					{
@@ -345,7 +347,7 @@ class Session extends events.EventEmitter {
 		});
 	}
 	createSessionInfo(options: SessionInfoOptions): SessionInfo {
-		console.log("Creating Session Info");
+		if(options.log) console.log("Creating Session Info");
 		return {
 			hostName: options.hostName,
 			worldName: options.worldName,
@@ -368,7 +370,11 @@ class Session extends events.EventEmitter {
 		}
 	}
 
-	createSessionRequest(): SessionRequestOptions {
+	async createSessionRequest(): Promise<SessionRequestOptions> {
+		const info = await ping({
+			host: this.SessionInfo.ip,
+			port: this.SessionInfo.port
+		})
 		return {
 			properties: {
 				system: {
@@ -381,8 +387,8 @@ class Session extends events.EventEmitter {
 					CrossPlayDisabled: false,
 					Joinability: "joinable_by_friends",
 					LanGame: true,
-					MaxMemberCount: this.SessionInfo.maxPlayers,
-					MemberCount: this.SessionInfo.players,
+					MaxMemberCount: parseInt(info.playersMax.toString()) || 20,
+					MemberCount: parseInt(info.playersOnline.toString()) || 0,
 					OnlineCrossPlatformGame: true,
 					SupportedConnections: [
 						{
@@ -436,11 +442,27 @@ class Session extends events.EventEmitter {
 		};
 	}
 
-	updateSession(sessionInfo?: SessionInfoOptions) {
-		if (sessionInfo) this.updateSessionInfo(sessionInfo);
+	async updateSession(sessionInfo?: SessionInfoOptions) {
+		if (sessionInfo) {
+			ping({
+				host: this.SessionInfo.ip,
+				port: this.SessionInfo.port
+			}).then(advertisement => {
+				sessionInfo.worldName = advertisement.name || sessionInfo.worldName
+				sessionInfo.players = parseInt(advertisement.playersOnline.toString()) || 0
+				sessionInfo.maxPlayers = parseInt(advertisement.playersMax.toString()) || 20,
+				sessionInfo.version = advertisement.version
+				sessionInfo.protocol = advertisement.protocol
+				console.log(advertisement)
+				this.updateSessionInfo(sessionInfo);
+				console.log(this.SessionInfo)
+			})
+		}
+		
+		if(sessionInfo && sessionInfo.log) console.log("updateSession");
+		
 
-		console.log("updateSession");
-		var createSessionContent = this.createSessionRequest();
+		var createSessionContent = await this.createSessionRequest();
 		//console.log(createSessionContent);
 		const options = {
 			method: "PUT",
@@ -459,15 +481,15 @@ class Session extends events.EventEmitter {
 			this.SessionInfo.sessionId;
 
 		const createSessionRequest = https.request(uri, options, (res) => {
-			console.log(
+			if(sessionInfo && sessionInfo.log) console.log(
 				"----------------------------------- Start of Update Session"
 			);
-			console.log("statusCode:", res.statusCode);
+			if(sessionInfo && sessionInfo.log) console.log("statusCode:", res.statusCode);
 			//console.log("headers:", res.headers);
 
 			res.on("data", (d) => {
-				console.log("data:", d);
-				console.log(
+				if(sessionInfo && sessionInfo.log) console.log("data:", d);
+				if(sessionInfo && sessionInfo.log) console.log(
 					"----------------------------------- End of Update Session"
 				);
 				this.emit("sessionUpdated");

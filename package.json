@@ -13,6 +13,7 @@
   "author": "minerj101",
   "license": "GLPv3",
   "dependencies": {
+    "bedrock-protocol": "^3.14.0",
     "friend-connect": "^0.1.5",
     "websocket": "^1.0.34"
   },
