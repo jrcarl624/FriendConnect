@@ -393,8 +393,12 @@ class Session extends events.EventEmitter {
 					CrossPlayDisabled: false,
 					Joinability: "joinable_by_friends",
 					LanGame: true,
-					MaxMemberCount: parseInt(info.playersMax.toString()) || 20,
-					MemberCount: parseInt(info.playersOnline.toString()) || 0,
+					MaxMemberCount:
+						parseInt(info.playersMax.toString()) ||
+						this.SessionInfo.maxPlayers,
+					MemberCount:
+						parseInt(info.playersOnline.toString()) ||
+						this.SessionInfo.players,
 					OnlineCrossPlatformGame: true,
 					SupportedConnections: [
 						{
@@ -408,7 +412,7 @@ class Session extends events.EventEmitter {
 					TitleId: 0,
 					hostName: this.SessionInfo.hostName,
 					ownerId: this.SessionInfo.xuid,
-					rakNetGUID: "", //this.info.rakNetGUID,
+					rakNetGUID: "",
 					worldName: this.SessionInfo.worldName,
 					worldType: "Survival",
 					protocol: this.SessionInfo.protocol,
@@ -457,9 +461,11 @@ class Session extends events.EventEmitter {
 				sessionInfo.worldName =
 					advertisement.name || sessionInfo.worldName;
 				sessionInfo.players =
-					parseInt(advertisement.playersOnline.toString()) || 0;
+					parseInt(advertisement.playersOnline.toString()) ||
+					sessionInfo.players;
 				(sessionInfo.maxPlayers =
-					parseInt(advertisement.playersMax.toString()) || 20),
+					parseInt(advertisement.playersMax.toString()) ||
+					sessionInfo.maxPlayers),
 					(sessionInfo.version = advertisement.version);
 				sessionInfo.protocol = advertisement.protocol;
 				console.log(advertisement);

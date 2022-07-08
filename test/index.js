@@ -1,6 +1,7 @@
 import { Session } from "../dist/index.js";
-import pkg from "prismarine-auth";
-const { Authflow, Titles } = pkg;
+import auth from "prismarine-auth";
+const { Authflow, Titles } = auth;
+
 const token = await new Authflow("TailvileMC", "./auth", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
@@ -16,7 +17,7 @@ new Session(
 		maxPlayers: 20,
 		ip: "tailvile.xyz",
 		port: 19132,
-		log: true
+		log: true,
 	},
 	token
 );
