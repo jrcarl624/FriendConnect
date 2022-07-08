@@ -9,6 +9,7 @@ interface SessionInfoOptions {
     maxPlayers: number;
     ip: string;
     port: number;
+    log?: boolean;
 }
 interface Connection {
     ConnectionType: 7;

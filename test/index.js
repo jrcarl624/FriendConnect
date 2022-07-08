@@ -16,6 +16,7 @@ new Session(
 		maxPlayers: 20,
 		ip: "tailvile.xyz",
 		port: 19132,
+		log: true
 	},
 	token
 );
