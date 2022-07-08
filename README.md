@@ -18,10 +18,13 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 
 `node --es-module-specifier-resolution=node example.js`
 
+Set `type` to `module` in your `package.json`.
+
 ```js
 import { Session } from "friend-connect";
-import pkg from "prismarine-auth";
-const { Authflow, Titles } = pkg;
+import auth from "prismarine-auth";
+
+const { Authflow, Titles } = auth;
 const token = await new Authflow("friend-connect", "./", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
@@ -50,7 +53,7 @@ new Session(
 -   [ ] Check if the user owns any games if so send an error telling them to use an alt account.
 -   [ ] Add an option to disable auto friending.
 -   [ ] Make a user friendly way to use this tool like a discord bot or something.
--   [ ]
+-   [ ] Add a cli tool maybe.
 
 ## Credit
 
