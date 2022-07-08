@@ -4,6 +4,7 @@ const { w3cwebsocket: W3CWebSocket } = wspkg;
 import events from "events";
 import https from "https";
 import crypto from "crypto";
+import { ping } from "bedrock-protocol";
 
 const Constants = {
 	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
@@ -369,7 +370,11 @@ class Session extends events.EventEmitter {
 		}
 	}
 
-	createSessionRequest(): SessionRequestOptions {
+	async createSessionRequest(): Promise<SessionRequestOptions> {
+		const info = await ping({
+			host: this.SessionInfo.ip,
+			port: this.SessionInfo.port
+		})
 		return {
 			properties: {
 				system: {
@@ -382,8 +387,8 @@ class Session extends events.EventEmitter {
 					CrossPlayDisabled: false,
 					Joinability: "joinable_by_friends",
 					LanGame: true,
-					MaxMemberCount: this.SessionInfo.maxPlayers,
-					MemberCount: this.SessionInfo.players,
+					MaxMemberCount: parseInt(info.playersMax.toString()) || 20,
+					MemberCount: parseInt(info.playersOnline.toString()) || 0,
 					OnlineCrossPlatformGame: true,
 					SupportedConnections: [
 						{
@@ -437,12 +442,27 @@ class Session extends events.EventEmitter {
 		};
 	}
 
-	updateSession(sessionInfo?: SessionInfoOptions) {
-		if (sessionInfo) this.updateSessionInfo(sessionInfo);
+	async updateSession(sessionInfo?: SessionInfoOptions) {
+		if (sessionInfo) {
+			ping({
+				host: this.SessionInfo.ip,
+				port: this.SessionInfo.port
+			}).then(advertisement => {
+				sessionInfo.worldName = advertisement.name || sessionInfo.worldName
+				sessionInfo.players = parseInt(advertisement.playersOnline.toString()) || 0
+				sessionInfo.maxPlayers = parseInt(advertisement.playersMax.toString()) || 20,
+				sessionInfo.version = advertisement.version
+				sessionInfo.protocol = advertisement.protocol
+				console.log(advertisement)
+				this.updateSessionInfo(sessionInfo);
+				console.log(this.SessionInfo)
+			})
+		}
 		
 		if(sessionInfo && sessionInfo.log) console.log("updateSession");
+		
 
-		var createSessionContent = this.createSessionRequest();
+		var createSessionContent = await this.createSessionRequest();
 		//console.log(createSessionContent);
 		const options = {
 			method: "PUT",

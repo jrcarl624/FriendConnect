@@ -99,12 +99,12 @@ declare class Session extends events.EventEmitter {
     constructor(options: SessionInfoOptions, token: Token);
     createSessionInfo(options: SessionInfoOptions): SessionInfo;
     updateSessionInfo(options: SessionInfoOptions): void;
-    createSessionRequest(): SessionRequestOptions;
+    createSessionRequest(): Promise<SessionRequestOptions>;
     createHandleRequest(version: number, type: string, sessionRef: sessionRef): {
         version: number;
         type: string;
         sessionRef: sessionRef;
     };
-    updateSession(sessionInfo?: SessionInfoOptions): void;
+    updateSession(sessionInfo?: SessionInfoOptions): Promise<void>;
 }
 export { Session };

@@ -3,6 +3,7 @@ const { w3cwebsocket: W3CWebSocket } = wspkg;
 import events from "events";
 import https from "https";
 import crypto from "crypto";
+import { ping } from "bedrock-protocol";
 const Constants = {
     SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07",
     PEOPLE: new URL("https://social.xboxlive.com/users/me/people"),
@@ -210,7 +211,11 @@ class Session extends events.EventEmitter {
             this.SessionInfo[key] = options[key];
         }
     }
-    createSessionRequest() {
+    async createSessionRequest() {
+        const info = await ping({
+            host: this.SessionInfo.ip,
+            port: this.SessionInfo.port
+        });
         return {
             properties: {
                 system: {
@@ -223,8 +228,8 @@ class Session extends events.EventEmitter {
                     CrossPlayDisabled: false,
                     Joinability: "joinable_by_friends",
                     LanGame: true,
-                    MaxMemberCount: this.SessionInfo.maxPlayers,
-                    MemberCount: this.SessionInfo.players,
+                    MaxMemberCount: parseInt(info.playersMax.toString()) || 20,
+                    MemberCount: parseInt(info.playersOnline.toString()) || 0,
                     OnlineCrossPlatformGame: true,
                     SupportedConnections: [
                         {
@@ -275,12 +280,25 @@ class Session extends events.EventEmitter {
             sessionRef: sessionRef,
         };
     }
-    updateSession(sessionInfo) {
-        if (sessionInfo)
-            this.updateSessionInfo(sessionInfo);
+    async updateSession(sessionInfo) {
+        if (sessionInfo) {
+            ping({
+                host: this.SessionInfo.ip,
+                port: this.SessionInfo.port
+            }).then(advertisement => {
+                sessionInfo.worldName = advertisement.name || sessionInfo.worldName;
+                sessionInfo.players = advertisement.playersOnline;
+                sessionInfo.maxPlayers = advertisement.playersMax;
+                sessionInfo.version = advertisement.version;
+                sessionInfo.protocol = advertisement.protocol;
+                console.log(advertisement);
+                this.updateSessionInfo(sessionInfo);
+                console.log(this.SessionInfo);
+            });
+        }
         if (sessionInfo && sessionInfo.log)
             console.log("updateSession");
-        var createSessionContent = this.createSessionRequest();
+        var createSessionContent = await this.createSessionRequest();
         //console.log(createSessionContent);
         const options = {
             method: "PUT",
