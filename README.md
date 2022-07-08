@@ -19,30 +19,27 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 `node --es-module-specifier-resolution=node example.js`
 
 ```js
-const { Authflow, Titles } = require("prismarine-auth");
-const { Session } = require("friend-connect");
-
-new Authflow("FriendConnect", "./", {
+import { Session } from "friend-connect";
+import pkg from "prismarine-auth";
+const { Authflow, Titles } = pkg;
+const token = await new Authflow("friend-connect", "./", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
-})
-	.getXboxToken()
-	.then((token) => {
-		new Session(
-			{
-				hostName: "Friend Connect",
-				worldName:
-					"Fun Fact: Friend Connect was first revealed 7/7/2022",
-				version: "1.19.2",
-				protocol: 527,
-				players: 0,
-				maxPlayers: 20,
-				ip: "", // Put your ip here
-				port: 19132,
-			},
-			token
-		);
-	});
+}).getXboxToken();
+
+new Session(
+	{
+		hostName: "friend-connect",
+		worldName: "Fun Fact: friend-connect was revealed 7/7/2022",
+		version: "1.19.2",
+		protocol: 527,
+		players: 0,
+		maxPlayers: 20,
+		ip: "", // put your ip here
+		port: 19132,
+	},
+	token
+);
 ```
 
 ## To Do List
