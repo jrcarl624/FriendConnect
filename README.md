@@ -14,7 +14,7 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 const { Authflow, Titles } = require("prismarine-auth");
 const { Session } = require("friend-connect");
 
-new Authflow("TailvileMC", "./", {
+new Authflow("FriendConnect", "./", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
 })
@@ -22,13 +22,14 @@ new Authflow("TailvileMC", "./", {
 	.then((token) => {
 		new Session(
 			{
-				hostName: "Tailvile.xyz",
-				worldName: "Fun Fact: Tailvile is almost 2 years old.",
+				hostName: "Friend Connect",
+				worldName:
+					"Fun Fact: Friend Connect was first revealed 7/7/2022",
 				version: "1.19.2",
 				protocol: 527,
 				players: 0,
 				maxPlayers: 20,
-				ip: "tailvile.xyz",
+				ip: "", // Put your ip here
 				port: 19132,
 			},
 			token
