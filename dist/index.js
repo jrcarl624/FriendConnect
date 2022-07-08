@@ -3,11 +3,14 @@ const { w3cwebsocket: W3CWebSocket } = wspkg;
 import events from "events";
 import https from "https";
 import crypto from "crypto";
-class Constants {
-}
-Constants.SERVICE_CONFIG_ID = "4fc10100-5f7a-4470-899b-280835760c07"; // The service config ID for Minecraft
-Constants.PEOPLE = new URL("https://social.xboxlive.com/users/me/people");
-Constants.PEOPLEHUB = new URL("https://peoplehub.xboxlive.com/users/me/people");
+const Constants = {
+    SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07",
+    PEOPLE: new URL("https://social.xboxlive.com/users/me/people"),
+    PEOPLE_HUB: new URL("https://peoplehub.xboxlive.com/users/me/people"),
+    HANDLE: new URL("https://sessiondirectory.xboxlive.com/handles"),
+    CONNECTIONS: new URL("https://sessiondirectory.xboxlive.com/connections/"),
+    RTA_SOCKET: new URL("wss://rta.xboxlive.com/socket"),
+};
 const debug = false;
 const XboxLive = class {
     constructor(token) {
@@ -25,7 +28,7 @@ const XboxLive = class {
         };
         https
             .request(Constants.PEOPLE + `/xuid(${xuid})`, options, (res) => {
-            //m       console.log(res.statusCode, res.statusMessage);
+            //console.log(res.statusCode, res.statusMessage);
             res.on("error", (err) => {
                 console.log("Add Friend:\n", err);
             });
@@ -58,8 +61,8 @@ class Session extends events.EventEmitter {
         this.token = token;
         this.SessionInfo = this.createSessionInfo(options);
         this.xblInstance = new XboxLive(token);
-        var ws = new W3CWebSocket("wss://rta.xboxlive.com/connect", "echo-protocol", undefined, {
-            Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
+        var ws = new W3CWebSocket(Constants.RTA_SOCKET.toString(), "echo-protocol", undefined, {
+            Authorization: this.xblInstance.tokenHeader,
         });
         ws.onerror = (error) => {
             console.log("Error: ", error);
@@ -69,7 +72,7 @@ class Session extends events.EventEmitter {
         };
         ws.onopen = () => {
             console.log("Connected");
-            ws.send('[1,1,"https://sessiondirectory.xboxlive.com/connections/"]');
+            ws.send(`[1,1,"${Constants.CONNECTIONS}"]`);
             console.log("WebSocket Client Connected");
         };
         ws.onclose = () => {
@@ -92,7 +95,7 @@ class Session extends events.EventEmitter {
             }
         };
         this.on("connectionId", () => {
-            console.log(this.SessionInfo.connectionId);
+            //console.log(this.SessionInfo.connectionId);
             this.updateSession();
         });
         this.on("sessionUpdated", () => {
@@ -102,7 +105,7 @@ class Session extends events.EventEmitter {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
+                        Authorization: this.xblInstance.tokenHeader,
                         "x-xbl-contract-version": 107,
                     },
                 };
@@ -111,7 +114,7 @@ class Session extends events.EventEmitter {
                     templateName: "MinecraftLobby",
                     name: this.SessionInfo.sessionId,
                 });
-                var createHandleRequest = https.request("https://sessiondirectory.xboxlive.com/handles", createHandleRequestOptions, (res) => {
+                var createHandleRequest = https.request(Constants.HANDLE, createHandleRequestOptions, (res) => {
                     //console.log("statusCode:", res.statusCode);
                     //console.log("headers:", res.headers);
                     res.on("data", (data) => {
@@ -134,8 +137,8 @@ class Session extends events.EventEmitter {
                 this.updateSession(this.SessionInfo);
             }, 30000);
             setInterval(() => {
-                //console.log("Friend Interval");
-                let request = https.request(Constants.PEOPLEHUB + "/followers", {
+                console.log("Friend Interval");
+                let request = https.request(Constants.PEOPLE_HUB + "/followers", {
                     method: "GET",
                     headers: {
                         Authorization: this.xblInstance.tokenHeader,
@@ -148,9 +151,9 @@ class Session extends events.EventEmitter {
                     res.on("data", function (chunk) {
                         body += chunk;
                     });
-                    res.on("end", (unparsedData) => {
+                    res.on("end", () => {
                         try {
-                            const data = JSON.parse(body);
+                            let data = JSON.parse(body);
                             for (let i of data.people) {
                                 if (i.isFollowingCaller) {
                                     if (!i.isFollowedByCaller)
@@ -170,7 +173,7 @@ class Session extends events.EventEmitter {
                     });
                 });
                 request.on("error", (err) => {
-                    //console.log("Get People:\n", err);
+                    console.log("Get People:\n", err);
                 });
                 request.end();
             }, 10000);
@@ -190,6 +193,7 @@ class Session extends events.EventEmitter {
             rakNetGUID: crypto.randomUUID(),
             sessionId: crypto.randomUUID(),
             xuid: this.token.userXUID,
+            connectionId: "",
         };
     }
     updateSessionInfo(options) {
@@ -267,12 +271,12 @@ class Session extends events.EventEmitter {
             this.updateSessionInfo(sessionInfo);
         console.log("updateSession");
         var createSessionContent = this.createSessionRequest();
-        console.log(createSessionContent);
+        //console.log(createSessionContent);
         const options = {
             method: "PUT",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
+                Authorization: this.xblInstance.tokenHeader,
                 "x-xbl-contract-version": 107,
             },
         };
@@ -282,8 +286,8 @@ class Session extends events.EventEmitter {
             "/sessionTemplates/MinecraftLobby/sessions/" +
             this.SessionInfo.sessionId;
         const createSessionRequest = https.request(uri, options, (res) => {
-            //console.log("----------------------------------- Start of Update Session");
-            //console.log("statusCode:", res.statusCode);
+            console.log("----------------------------------- Start of Update Session");
+            console.log("statusCode:", res.statusCode);
             //console.log("headers:", res.headers);
             res.on("data", (d) => {
                 console.log("data:", d);
@@ -297,7 +301,7 @@ class Session extends events.EventEmitter {
         });
         createSessionRequest.write(JSON.stringify(createSessionContent));
         createSessionRequest.on("error", (e) => {
-            console.error(e);
+            console.error("createSessionRequest Error: ", e);
         });
         createSessionRequest.end();
     }

@@ -1,5 +1,11 @@
 # Friend Connect
 
+## WARNING
+
+BEFORE YOU USE THIS TOOL, PLEASE READ THE FOLLOWING:
+WE _AS CONTRIBUTORS_ ARE NOT RESPONSIBLE FOR ANY DAMAGE OR LOSS CAUSED BY THIS APP.
+USE AN ALT ACCOUNT, JUST IN CASE THERE IS AN ISSUE WITH THIS METHOD.
+
 ## About
 
 This is a project for minecraft bedrock that allows you to join servers via the in game friends tab. Allowing console players to connect to servers.

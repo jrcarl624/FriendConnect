@@ -19,8 +19,8 @@ interface Connection {
 interface SessionRequestOptions {
     properties: {
         system: {
-            joinRestriction: string | "followed";
-            readRestriction: string | "followed";
+            joinRestriction: "followed";
+            readRestriction: "followed";
             closed: false;
         };
         custom: {
@@ -77,7 +77,7 @@ interface SessionInfo {
     rakNetGUID: string;
     sessionId: string;
     xuid: string;
-    connectionId?: string;
+    connectionId: string;
 }
 interface Token {
     userXUID: string;
