@@ -9,9 +9,9 @@ const Constants = {
 	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
 	PEOPLE: new URL("https://social.xboxlive.com/users/me/people"),
 	PEOPLE_HUB: new URL("https://peoplehub.xboxlive.com/users/me/people"),
-	HANDLE: new URL("https://sessiondirectory.xboxlive.com/handles"),
-	CONNECTIONS: new URL("https://sessiondirectory.xboxlive.com/connections/"),
-	RTA_SOCKET: new URL("wss://rta.xboxlive.com/socket"),
+	HANDLE: "https://sessiondirectory.xboxlive.com/handles",
+	CONNECTIONS: "https://sessiondirectory.xboxlive.com/connections",
+	RTA_SOCKET: "wss://rta.xboxlive.com/socket",
 };
 
 const debug = false;
@@ -192,15 +192,15 @@ class Session extends events.EventEmitter {
 
 		this.xblInstance = new XboxLive(token);
 		var ws = new W3CWebSocket(
-			Constants.RTA_SOCKET.toString(),
+			"wss://rta.xboxlive.com/connect",
 			"echo-protocol",
 			undefined,
 			{
-				Authorization: this.xblInstance.tokenHeader,
+				Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
 			}
 		);
 		ws.onerror = (error) => {
-			console.log("Error: ", error);
+			console.log("Error: ", error.stack);
 
 			console.log("Connection Error");
 			console.log("Restarting...");
@@ -209,7 +209,9 @@ class Session extends events.EventEmitter {
 
 		ws.onopen = () => {
 			console.log("Connected");
-			ws.send(`[1,1,"${Constants.CONNECTIONS}"]`);
+			ws.send(
+				'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
+			);
 			console.log("WebSocket Client Connected");
 		};
 		ws.onclose = () => {
@@ -219,7 +221,7 @@ class Session extends events.EventEmitter {
 		};
 
 		ws.onmessage = (event) => {
-			//console.log(event.data);
+			console.log(event.data);
 			switch (typeof event.data) {
 				case "string":
 					const data = JSON.parse(event.data);
