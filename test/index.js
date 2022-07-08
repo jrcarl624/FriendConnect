@@ -1,7 +1,7 @@
 import { Session } from "../dist/index.js";
 import pkg from "prismarine-auth";
 const { Authflow, Titles } = pkg;
-const token = await new Authflow("TailvileMC", "./", {
+const token = await new Authflow("TailvileMC", "./auth", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
 }).getXboxToken();
