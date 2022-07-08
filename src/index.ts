@@ -313,9 +313,9 @@ class Session extends events.EventEmitter {
 							body += chunk;
 						});
 
-						res.on("end", (unparsedData) => {
+						res.on("end", () => {
 							try {
-								const data: PeopleList = JSON.parse(body);
+								let data: PeopleList = JSON.parse(body);
 
 								for (let i of data.people) {
 									if (i.isFollowingCaller) {
