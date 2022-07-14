@@ -4,7 +4,7 @@ const { w3cwebsocket: W3CWebSocket } = wspkg;
 import events from "events";
 import https from "https";
 import crypto from "crypto";
-import { ping } from "bedrock-protocol";
+import { ping, ServerAdvertisement } from "bedrock-protocol";
 
 const Constants = {
 	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
@@ -15,9 +15,8 @@ const Constants = {
 	RTA_SOCKET: "wss://rta.xboxlive.com/socket",
 };
 
-const debug = false;
-
 interface SessionInfoOptions {
+	keepVersionAndProtocolConstant: boolean;
 	hostName: string;
 	worldName: string;
 	version: string;
@@ -27,10 +26,11 @@ interface SessionInfoOptions {
 	ip: string;
 	port: number;
 	log?: boolean;
+	connectionType: number;
 }
 
 interface Connection {
-	ConnectionType: 7;
+	ConnectionType: number;
 	HostIpAddress: string;
 	HostPort: number;
 	RakNetGUID: string;
@@ -87,6 +87,7 @@ interface SessionRequestOptions {
 }
 
 interface SessionInfo {
+	keepVersionAndProtocolConstant: boolean;
 	hostName: string;
 	worldName: string;
 	version: string;
@@ -99,6 +100,7 @@ interface SessionInfo {
 	sessionId: string;
 	xuid: string;
 	connectionId: string;
+	connectionType: number;
 }
 
 interface Token {
@@ -202,11 +204,10 @@ class Session extends events.EventEmitter {
 			}
 		);
 		ws.onerror = (error) => {
-			console.log("Error: ", error.stack);
-
+			console.log("Error: ", error.message);
 			console.log("Connection Error");
-			console.log("Restarting...");
-			new Session(options, token);
+
+			//new Session(options, token);
 		};
 
 		ws.onopen = () => {
@@ -216,10 +217,16 @@ class Session extends events.EventEmitter {
 			);
 			if (options.log) console.log("WebSocket Client Connected");
 		};
-		ws.onclose = () => {
-			if (options.log) console.log("WebSocket Client Closed");
-			if (options.log) console.log("Restarting...");
-			new Session(options, token);
+		ws.onclose = (event) => {
+			if (options.log) {
+				console.log("WebSocket Client Closed");
+				console.log("Code: " + event.code);
+				console.log("Reason: " + event.reason);
+				console.log("Clean Exit: " + event.wasClean);
+			}
+
+			//if (options.log) console.log("Restarting...");
+			//new Session(options, token);
 		};
 
 		ws.onmessage = (event) => {
@@ -363,10 +370,13 @@ class Session extends events.EventEmitter {
 			maxPlayers: options.maxPlayers,
 			ip: options.ip,
 			port: options.port,
-			rakNetGUID: crypto.randomUUID(),
+			rakNetGUID: "",
 			sessionId: crypto.randomUUID(),
 			xuid: this.token.userXUID,
 			connectionId: "",
+			connectionType: options.connectionType,
+			keepVersionAndProtocolConstant:
+				options.keepVersionAndProtocolConstant,
 		};
 	}
 
@@ -376,11 +386,39 @@ class Session extends events.EventEmitter {
 		}
 	}
 
+	async getAdvertisement(): Promise<ServerAdvertisement> {
+		let info;
+		try {
+			info = await ping({
+				host: this.SessionInfo.ip,
+				port: this.SessionInfo.port,
+			});
+		} catch (e) {
+			info = {
+				motd: this.SessionInfo.worldName,
+				name: this.SessionInfo.hostName,
+				protocol: this.SessionInfo.protocol,
+				version: this.SessionInfo.version,
+				playersOnline: this.SessionInfo.players,
+				playersMax: this.SessionInfo.maxPlayers,
+				gamemode: "survival",
+				serverId: "",
+			};
+		}
+
+		if (this.SessionInfo.keepVersionAndProtocolConstant) {
+			info.version = this.SessionInfo.version;
+			info.protocol = this.SessionInfo.protocol;
+		}
+		return info;
+	}
+
 	async createSessionRequest(): Promise<SessionRequestOptions> {
-		const info = await ping({
-			host: this.SessionInfo.ip,
-			port: this.SessionInfo.port,
-		});
+		//TODO: delete this
+		console.log("Creating Session Request");
+
+		const info = await this.getAdvertisement();
+
 		return {
 			properties: {
 				system: {
@@ -402,11 +440,11 @@ class Session extends events.EventEmitter {
 					OnlineCrossPlatformGame: true,
 					SupportedConnections: [
 						{
-							ConnectionType: 7,
+							ConnectionType: this.SessionInfo.connectionType,
 							HostIpAddress: this.SessionInfo.ip,
 							HostPort: this.SessionInfo.port,
 
-							RakNetGUID: this.SessionInfo.rakNetGUID,
+							RakNetGUID: "",
 						},
 					],
 					TitleId: 0,
@@ -454,10 +492,7 @@ class Session extends events.EventEmitter {
 
 	async updateSession(sessionInfo?: SessionInfoOptions) {
 		if (sessionInfo) {
-			ping({
-				host: this.SessionInfo.ip,
-				port: this.SessionInfo.port,
-			}).then((advertisement) => {
+			this.getAdvertisement().then((advertisement) => {
 				sessionInfo.worldName =
 					advertisement.name || sessionInfo.worldName;
 				sessionInfo.players =
