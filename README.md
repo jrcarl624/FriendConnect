@@ -54,6 +54,7 @@ new Session(
 		log: true,
 		connectionType: 6, // I don't recommend changing this.
 		keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
+		autoFriending: true, // Set this to true if you want to automatically add people who follow you
 	},
 	token
 );

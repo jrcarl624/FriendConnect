@@ -27,6 +27,7 @@ interface SessionInfoOptions {
 	port: number;
 	log?: boolean;
 	connectionType: number;
+	autoFriending: boolean;
 }
 
 interface Connection {
@@ -101,6 +102,7 @@ interface SessionInfo {
 	xuid: string;
 	connectionId: string;
 	connectionType: number;
+	autoFriending: boolean;
 }
 
 interface Token {
@@ -193,7 +195,6 @@ class Session extends events.EventEmitter {
 		console.log("Connecting...");
 		this.token = token;
 		this.SessionInfo = this.createSessionInfo(options);
-
 		this.xblInstance = new XboxLive(token);
 		var ws = new W3CWebSocket(
 			"wss://rta.xboxlive.com/connect",
@@ -311,52 +312,57 @@ class Session extends events.EventEmitter {
 			setInterval(() => {
 				this.updateSession(this.SessionInfo);
 			}, 30000);
-			setInterval(() => {
-				if (options.log) console.log("Friend Interval");
-				let request = https.request(
-					Constants.PEOPLE_HUB + "/followers",
-					{
-						method: "GET",
-						headers: {
-							Authorization: this.xblInstance.tokenHeader,
-							"x-xbl-contract-version": 5,
-							"Accept-Language": "en-us",
+			if (options.autoFriending)
+				setInterval(() => {
+					if (options.log) console.log("Friend Interval");
+					let request = https.request(
+						Constants.PEOPLE_HUB + "/followers",
+						{
+							method: "GET",
+							headers: {
+								Authorization: this.xblInstance.tokenHeader,
+								"x-xbl-contract-version": 5,
+								"Accept-Language": "en-us",
+							},
 						},
-					},
-					(res) => {
-						//console.log(res.statusCode, res.statusMessage);
-						var body = "";
-						res.on("data", function (chunk) {
-							body += chunk;
-						});
+						(res) => {
+							//console.log(res.statusCode, res.statusMessage);
+							var body = "";
+							res.on("data", function (chunk) {
+								body += chunk;
+							});
 
-						res.on("end", () => {
-							try {
-								let data: PeopleList = JSON.parse(body);
+							res.on("end", () => {
+								try {
+									let data: PeopleList = JSON.parse(body);
 
-								for (let i of data.people) {
-									if (i.isFollowingCaller) {
-										if (!i.isFollowedByCaller)
-											this.xblInstance.addFriend(i.xuid);
-									} else {
-										this.xblInstance.removeFriend(i.xuid);
+									for (let i of data.people) {
+										if (i.isFollowingCaller) {
+											if (!i.isFollowedByCaller)
+												this.xblInstance.addFriend(
+													i.xuid
+												);
+										} else {
+											this.xblInstance.removeFriend(
+												i.xuid
+											);
+										}
 									}
+								} catch (e) {
+									console.log(e);
 								}
-							} catch (e) {
-								console.log(e);
-							}
-						});
+							});
 
-						res.on("error", (err) => {
-							console.log("Get People:\n", err);
-						});
-					}
-				);
-				request.on("error", (err) => {
-					console.log("Get People:\n", err);
-				});
-				request.end();
-			}, 10000);
+							res.on("error", (err) => {
+								console.log("Get People:\n", err);
+							});
+						}
+					);
+					request.on("error", (err) => {
+						console.log("Get People:\n", err);
+					});
+					request.end();
+				}, 10000);
 		});
 	}
 	createSessionInfo(options: SessionInfoOptions): SessionInfo {
@@ -377,6 +383,7 @@ class Session extends events.EventEmitter {
 			connectionType: options.connectionType,
 			keepVersionAndProtocolConstant:
 				options.keepVersionAndProtocolConstant,
+			autoFriending: options.autoFriending,
 		};
 	}
 

@@ -20,6 +20,7 @@ new Session(
 		log: true,
 		connectionType: 6,
 		keepVersionAndProtocolConstant: true,
+		autoFriending: true,
 	},
 	token
 );
