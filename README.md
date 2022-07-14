@@ -8,7 +8,9 @@ USE AN ALT ACCOUNT, JUST IN CASE THERE IS AN ISSUE WITH THIS METHOD.
 
 ## About
 
-This is a project for minecraft bedrock that allows you to join servers via the in game friends tab. Allowing console players to connect to servers.
+This is a project for minecraft bedrock that allows you to join servers via the in game friends tab. Allowing console players to connect to servers. This project is still in development, so please be patient if there are issues.
+
+The best way to use this tool at the moment is as a node module. Read the tutorial below for more information of how to set this up.
 
 ## How it works in game
 
@@ -16,39 +18,48 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 
 ## How to use it:
 
-Go into test/index.js and change:
-- All refrences to tailville.xyz to whatever you want
-- ip: to your server ip (GeyserMC has to be installed on java!!!)
-- port: to your server's port (You probably won't have to change it)
+You can use any tool to get the token, for this tutorial I will use prismarine-auth.
 
-Then do `node test` and follow the steps in terminal to start the tool.
+```tty
+$ npm install friend-connect prismarine-auth
+```
 
-Here's a graph of stuff to change:
+Create a file and name it whatever you want.
+Then paste this example into it:
 
 ```js
 import { Session } from "friend-connect";
 import auth from "prismarine-auth";
-
 const { Authflow, Titles } = auth;
-const token = await new Authflow("friend-connect", "./", { //change friend-connect to whatever
+
+const token = await new Authflow("TailvileMC", "./auth", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
 }).getXboxToken();
 
 new Session(
 	{
-		hostName: "friend-connect", //change to whatever
-		worldName: "Fun Fact: friend-connect was revealed 7/7/2022", //change to what you want the MOTD to be, basically
-		version: "1.19.2",
-		protocol: 527,
-		players: 0,
-		maxPlayers: 20,
-		ip: "", // put your server ip / domain here
+		hostName: "Server Name", // The hostname of the server
+		worldName: "Message of the Day: Hello World", // Use as a MOTD
+
+		version: "1.19.10", //The client of the server you are connecting to.
+
+		protocol: 534, //The protocol of the server you are connecting to.
+
+		players: 0, // Used as a fallback if pinging the server fails.
+		maxPlayers: 20, // Used as a fallback if pinging the server fails.
+
+		ip: "example.com", // The ip of the server you are using.
 		port: 19132,
+		log: true,
+		connectionType: 6, // I don't recommend changing this.
+		keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
 	},
 	token
 );
 ```
+
+You can run the file with `node --es-module-specifier-resolution=node ./path/to/file.js`.
 
 ## To Do List
 
