@@ -59,6 +59,8 @@ new Session(
 );
 ```
 
+Set `type` to `module` in the package.json file.
+
 You can run the file with `node --es-module-specifier-resolution=node ./path/to/file.js`.
 
 ## To Do List
