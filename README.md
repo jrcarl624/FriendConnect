@@ -70,7 +70,7 @@ You can run the file with `node --es-module-specifier-resolution=node ./path/to/
 -   [x] Add automatically querying the player numbers from the server on session Update.
 -   [ ] Add the ability to provide an array of strings to be chosen from for the hostName and worldName that is rotated through on session Update.
 -   [ ] Check if the user owns any games if so send an error telling them to use an alt account.
--   [ ] Add an option to disable auto friending.
+-   [x] Add an option to disable auto friending.
 -   [ ] Make a user friendly way to use this tool like a discord bot or something.
 -   [ ] Add a cli tool maybe.
 
