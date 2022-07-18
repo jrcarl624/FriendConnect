@@ -58,6 +58,15 @@ MS_EMAIL_ADDRESS = "email";
 MS_PASSWORD = "password";
 ```
 
+Make another file in the root directory of your project called `.env`
+Then paste this example into it:
+
+```js
+
+```
+
+
+
 Set `type` to `module` in the package.json file.
 
 You can run the file with `node --es-module-specifier-resolution=node ./path/to/file.js`.
