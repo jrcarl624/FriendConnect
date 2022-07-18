@@ -8,7 +8,7 @@ config();
 const t = await new Authflow("tailvilemc@gmail.com", "./auth", {
 	authTitle: Titles.MinecraftNintendoSwitch,
 	deviceType: "Nintendo",
-	password: "Pjehmy8a",
+	password: "",
 }).getXboxToken();
 new Session({
 	hostName: "Tailvile.xyz",
