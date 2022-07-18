@@ -1,1 +1,0 @@
-t.then(console.log);

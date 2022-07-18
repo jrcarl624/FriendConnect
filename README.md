@@ -29,33 +29,35 @@ Then paste this example into it:
 
 ```js
 import { Session } from "friend-connect";
+import auth from "prismarine-auth";
+const { Authflow, Titles } = auth;
 
-new Session({
-	hostName: "Server Name", // The hostname of the server
-	worldName: "Message of the Day: Hello World", // Use as a MOTD
+const token = await new Authflow("TailvileMC", "./auth", {
+	authTitle: Titles.MinecraftNintendoSwitch,
+	deviceType: "Nintendo",
+}).getXboxToken();
 
-	version: "1.19.10", //The client of the server you are connecting to.
+new Session(
+	{
+		hostName: "Server Name", // The hostname of the server
+		worldName: "Message of the Day: Hello World", // Use as a MOTD
 
-	protocol: 534, //The protocol of the server you are connecting to.
+		version: "1.19.10", //The client of the server you are connecting to.
 
-	players: 0, // Used as a fallback if pinging the server fails.
-	maxPlayers: 20, // Used as a fallback if pinging the server fails.
+		protocol: 534, //The protocol of the server you are connecting to.
 
-	ip: "example.com", // The ip of the server you are using.
-	port: 19132,
-	log: true,
-	connectionType: 6, // I don't recommend changing this.
-	keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
-	autoFriending: true, // Set this to true if you want to automatically add people who follow the bot account
-});
-```
+		players: 0, // Used as a fallback if pinging the server fails.
+		maxPlayers: 20, // Used as a fallback if pinging the server fails.
 
-Make another file in the root directory of your project called `.env`
-Then paste this example into it:
-
-```js
-MS_EMAIL_ADDRESS = "email";
-MS_PASSWORD = "password";
+		ip: "example.com", // The ip of the server you are using.
+		port: 19132,
+		log: true,
+		connectionType: 6, // I don't recommend changing this.
+		keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
+		autoFriending: true, // Set this to true if you want to automatically add people who follow you
+	},
+	token
+);
 ```
 
 Set `type` to `module` in the package.json file.
