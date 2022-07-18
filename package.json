@@ -1,6 +1,6 @@
 {
   "name": "friend-connect",
-  "version": "0.1.9",
+  "version": "0.2",
   "description": "",
   "main": "./dist/index.js",
   "type": "module",
@@ -14,6 +14,7 @@
   "license": "GLPv3",
   "dependencies": {
     "bedrock-protocol": "^3.14.0",
+    "dotenv": "^16.0.1",
     "friend-connect": "^0.1.5",
     "websocket": "^1.0.34"
   },

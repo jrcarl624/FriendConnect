@@ -1,5 +1,5 @@
-import wspkg from "websocket";
-const { w3cwebsocket: W3CWebSocket } = wspkg;
+import wsPkg from "websocket";
+const { w3cwebsocket: W3CWebSocket } = wsPkg;
 
 import events from "events";
 import https from "https";
@@ -10,8 +10,6 @@ import Constants from "./constants.js";
 
 import auth from "prismarine-auth";
 const { Authflow, Titles } = auth;
-import { config } from "dotenv";
-config();
 
 interface SessionInfoOptions {
 	keepVersionAndProtocolConstant: boolean;
@@ -209,16 +207,15 @@ class Session extends events.EventEmitter {
 	sessionStarted: boolean = false;
 	token: Token;
 	xblInstance;
-
-	constructor(options: SessionInfoOptions, token?: Token) {
+	constructor(options: SessionInfoOptions, xblToken?: Token) {
 		super();
 		console.log("Connecting...");
-		config();
+		console.log(process.env.MS_EMAIL_ADDRESS, process.env.MS_PASSWORD);
 
 		let tokenPromise;
 
-		if (token) {
-			tokenPromise = Promise.resolve(token);
+		if (xblToken) {
+			tokenPromise = Promise.resolve(xblToken);
 		} else {
 			tokenPromise = new Authflow(
 				process.env.MS_EMAIL_ADDRESS,
@@ -228,10 +225,11 @@ class Session extends events.EventEmitter {
 					deviceType: "Nintendo",
 					password: process.env.MS_PASSWORD,
 				}
-			).getXboxToken();
+			).getXboxToken("https://pocket.realms.minecraft.net/");
 		}
 
 		tokenPromise.then((token: Token) => {
+			console.log(token);
 			this.token = token;
 			this.SessionInfo = this.createSessionInfo(options);
 			this.xblInstance = new XboxLive(token);
@@ -247,8 +245,7 @@ class Session extends events.EventEmitter {
 				console.log("Error: ", error.message);
 				console.log("Connection Error");
 				//TODO this.emit("error", error); implement, this would be useful just to have an option to turn on debugging which logs to a file
-
-				new Session(options);
+				new Session(options, xblToken);
 			};
 
 			ws.onopen = () => {
@@ -267,7 +264,7 @@ class Session extends events.EventEmitter {
 				}
 
 				if (options.log) console.log("Restarting...");
-				new Session(options);
+				new Session(options, xblToken);
 			};
 
 			ws.onmessage = (event) => {

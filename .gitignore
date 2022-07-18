@@ -4,3 +4,5 @@
 *package-lock.json
 *auth
 *dist
+*xboxAuth.ts
+.env
