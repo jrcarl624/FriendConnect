@@ -23,4 +23,4 @@ new Session({
 	connectionType: 6,
 	keepVersionAndProtocolConstant: true,
 	autoFriending: true,
-});
+},t);
