@@ -6,12 +6,14 @@ import https from "https";
 import crypto from "crypto";
 import { ping, ServerAdvertisement } from "bedrock-protocol";
 
-import Constants from "./constants.js";
-
-import auth from "prismarine-auth";
-const { Authflow, Titles } = auth;
-import { config } from "dotenv";
-config();
+const Constants = {
+	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
+	PEOPLE: new URL("https://social.xboxlive.com/users/me/people"),
+	PEOPLE_HUB: new URL("https://peoplehub.xboxlive.com/users/me/people"),
+	HANDLE: "https://sessiondirectory.xboxlive.com/handles",
+	CONNECTIONS: "https://sessiondirectory.xboxlive.com/connections",
+	RTA_SOCKET: "wss://rta.xboxlive.com/socket",
+};
 
 interface SessionInfoOptions {
 	keepVersionAndProtocolConstant: boolean;
@@ -177,30 +179,9 @@ const XboxLive = class {
 			})
 			.end();
 	}
-
-	async getAchievements(xuid?: string) {
-		//TODO finish this
-		let options = {
-			method: "GET",
-			headers: {
-				Authorization: this.tokenHeader,
-			},
-		};
-		let body;
-
-		let res = await https.request(
-			`https://achievements.xboxlive.com/users/xuid(${
-				xuid ?? this.token.userXUID
-			})/history/titles`,
-			options
-		);
-		res.on("data", (chunk) => {
-			body += chunk;
-		});
-
-		res.on("end", () => {});
-	}
 };
+
+//console.log(new XboxLive(token).tokenHeader);
 
 //TODO updating player number and motd
 
@@ -209,204 +190,179 @@ class Session extends events.EventEmitter {
 	sessionStarted: boolean = false;
 	token: Token;
 	xblInstance;
-
-	constructor(options: SessionInfoOptions, token?: Token) {
+	constructor(options: SessionInfoOptions, token: Token) {
 		super();
 		console.log("Connecting...");
-		config();
+		this.token = token;
+		this.SessionInfo = this.createSessionInfo(options);
+		this.xblInstance = new XboxLive(token);
+		var ws = new W3CWebSocket(
+			"wss://rta.xboxlive.com/connect",
+			"echo-protocol",
+			undefined,
+			{
+				Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
+			}
+		);
+		ws.onerror = (error) => {
+			console.log("Error: ", error.message);
+			console.log("Connection Error");
 
-		let tokenPromise;
+			//new Session(options, token);
+		};
 
-		if (token) {
-			tokenPromise = Promise.resolve(token);
-		} else {
-			tokenPromise = new Authflow(
-				process.env.MS_EMAIL_ADDRESS,
-				"./auth",
-				{
-					authTitle: Titles.MinecraftNintendoSwitch,
-					deviceType: "Nintendo",
-					password: process.env.MS_PASSWORD,
-				}
-			).getXboxToken();
-		}
-
-		tokenPromise.then((token: Token) => {
-			this.token = token;
-			this.SessionInfo = this.createSessionInfo(options);
-			this.xblInstance = new XboxLive(token);
-			var ws = new W3CWebSocket(
-				"wss://rta.xboxlive.com/connect",
-				"echo-protocol",
-				undefined,
-				{
-					Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
-				}
+		ws.onopen = () => {
+			console.log("Connected");
+			ws.send(
+				'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
 			);
-			ws.onerror = (error) => {
-				console.log("Error: ", error.message);
-				console.log("Connection Error");
-				//TODO this.emit("error", error); implement, this would be useful just to have an option to turn on debugging which logs to a file
+			if (options.log) console.log("WebSocket Client Connected");
+		};
+		ws.onclose = (event) => {
+			if (options.log) {
+				console.log("WebSocket Client Closed");
+				console.log("Code: " + event.code);
+				console.log("Reason: " + event.reason);
+				console.log("Clean Exit: " + event.wasClean);
+			}
 
-				new Session(options);
-			};
+			//if (options.log) console.log("Restarting...");
+			//new Session(options, token);
+		};
 
-			ws.onopen = () => {
-				console.log("Connected");
-				ws.send(
-					'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
+		ws.onmessage = (event) => {
+			if (options.log) console.log(event.data);
+			switch (typeof event.data) {
+				case "string":
+					const data = JSON.parse(event.data);
+
+					if (event.data.includes("ConnectionId")) {
+						this.SessionInfo.connectionId = data[4].ConnectionId;
+						this.emit("connectionId");
+					} else {
+						if (options.log)
+							console.log(
+								"----------------------------------- Start of RTA WS Message\n",
+								event.data,
+								"\n----------------------------------- End of RTA WS Message"
+							);
+					}
+			}
+		};
+
+		this.on("connectionId", () => {
+			//console.log(this.SessionInfo.connectionId);
+			this.updateSession();
+		});
+		this.on("sessionUpdated", () => {
+			if (!this.sessionStarted) {
+				if (options.log)
+					console.log(
+						"----------------------------------- Start of Handle Request"
+					);
+				var createHandleRequestOptions = {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: this.xblInstance.tokenHeader,
+						"x-xbl-contract-version": 107,
+					},
+				};
+
+				var createHandleContent = this.createHandleRequest(
+					1,
+					"activity",
+					{
+						scid: Constants.SERVICE_CONFIG_ID,
+						templateName: "MinecraftLobby",
+						name: this.SessionInfo.sessionId,
+					}
 				);
-				if (options.log) console.log("WebSocket Client Connected");
-			};
-			ws.onclose = (event) => {
-				if (options.log) {
-					console.log("WebSocket Client Closed");
-					console.log("Code: " + event.code);
-					console.log("Reason: " + event.reason);
-					console.log("Clean Exit: " + event.wasClean);
-				}
 
-				if (options.log) console.log("Restarting...");
-				new Session(options);
-			};
-
-			ws.onmessage = (event) => {
-				if (options.log) console.log(event.data);
-				switch (typeof event.data) {
-					case "string":
-						const data = JSON.parse(event.data);
-
-						if (event.data.includes("ConnectionId")) {
-							this.SessionInfo.connectionId =
-								data[4].ConnectionId;
-							this.emit("connectionId");
-						} else {
+				var createHandleRequest = https.request(
+					Constants.HANDLE,
+					createHandleRequestOptions,
+					(res) => {
+						//console.log("statusCode:", res.statusCode);
+						//console.log("headers:", res.headers);
+						res.on("data", (data) => {
 							if (options.log)
 								console.log(
-									"----------------------------------- Start of RTA WS Message\n",
-									event.data,
-									"\n----------------------------------- End of RTA WS Message"
+									data,
+									"\n----------------------------------- End of Handle Request"
 								);
-						}
-				}
-			};
+						});
+					}
+				);
 
-			this.on("connectionId", () => {
-				//console.log(this.SessionInfo.connectionId);
-				this.updateSession();
-			});
-			this.on("sessionUpdated", () => {
-				if (!this.sessionStarted) {
-					if (options.log)
-						console.log(
-							"----------------------------------- Start of Handle Request"
-						);
-					var createHandleRequestOptions = {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: this.xblInstance.tokenHeader,
-							"x-xbl-contract-version": 107,
-						},
-					};
+				createHandleRequest.write(JSON.stringify(createHandleContent));
 
-					var createHandleContent = this.createHandleRequest(
-						1,
-						"activity",
+				createHandleRequest.on("error", (e) => {
+					//console.error(e);
+					//console.log("----------------------------------- End of Handle Request");
+				});
+				createHandleRequest.end();
+				this.sessionStarted = true;
+				this.emit("sessionStarted");
+			}
+		});
+		this.on("sessionStarted", () => {
+			if (options.log) console.log("Session started");
+
+			setInterval(() => {
+				this.updateSession(this.SessionInfo);
+			}, 30000);
+			if (options.autoFriending)
+				setInterval(() => {
+					if (options.log) console.log("Friend Interval");
+					let request = https.request(
+						Constants.PEOPLE_HUB + "/followers",
 						{
-							scid: Constants.SERVICE_CONFIG_ID,
-							templateName: "MinecraftLobby",
-							name: this.SessionInfo.sessionId,
-						}
-					);
-
-					var createHandleRequest = https.request(
-						Constants.CREATE_HANDLE,
-						createHandleRequestOptions,
+							method: "GET",
+							headers: {
+								Authorization: this.xblInstance.tokenHeader,
+								"x-xbl-contract-version": 5,
+								"Accept-Language": "en-us",
+							},
+						},
 						(res) => {
-							//console.log("statusCode:", res.statusCode);
-							//console.log("headers:", res.headers);
-							res.on("data", (data) => {
-								if (options.log)
-									console.log(
-										data,
-										"\n----------------------------------- End of Handle Request"
-									);
+							//console.log(res.statusCode, res.statusMessage);
+							var body = "";
+							res.on("data", function (chunk) {
+								body += chunk;
+							});
+
+							res.on("end", () => {
+								try {
+									let data: PeopleList = JSON.parse(body);
+
+									for (let i of data.people) {
+										if (i.isFollowingCaller) {
+											if (!i.isFollowedByCaller)
+												this.xblInstance.addFriend(
+													i.xuid
+												);
+										} else {
+											this.xblInstance.removeFriend(
+												i.xuid
+											);
+										}
+									}
+								} catch (e) {
+									console.log(e);
+								}
+							});
+
+							res.on("error", (err) => {
+								console.log("Get People:\n", err);
 							});
 						}
 					);
-
-					createHandleRequest.write(
-						JSON.stringify(createHandleContent)
-					);
-
-					createHandleRequest.on("error", (e) => {
-						//console.error(e);
-						//console.log("----------------------------------- End of Handle Request");
+					request.on("error", (err) => {
+						console.log("Get People:\n", err);
 					});
-					createHandleRequest.end();
-					this.sessionStarted = true;
-					this.emit("sessionStarted");
-				}
-			});
-			this.on("sessionStarted", () => {
-				if (options.log) console.log("Session started");
-
-				setInterval(() => {
-					this.updateSession(this.SessionInfo);
-				}, 30000);
-				if (options.autoFriending)
-					setInterval(() => {
-						if (options.log) console.log("Friend Interval");
-						let request = https.request(
-							Constants.PEOPLE_HUB + "/followers",
-							{
-								method: "GET",
-								headers: {
-									Authorization: this.xblInstance.tokenHeader,
-									"x-xbl-contract-version": 5,
-									"Accept-Language": "en-us",
-								},
-							},
-							(res) => {
-								//console.log(res.statusCode, res.statusMessage);
-								var body = "";
-								res.on("data", function (chunk) {
-									body += chunk;
-								});
-
-								res.on("end", () => {
-									try {
-										let data: PeopleList = JSON.parse(body);
-
-										for (let i of data.people) {
-											if (i.isFollowingCaller) {
-												if (!i.isFollowedByCaller)
-													this.xblInstance.addFriend(
-														i.xuid
-													);
-											} else {
-												this.xblInstance.removeFriend(
-													i.xuid
-												);
-											}
-										}
-									} catch (e) {
-										console.log(e);
-									}
-								});
-
-								res.on("error", (err) => {
-									console.log("Get People:\n", err);
-								});
-							}
-						);
-						request.on("error", (err) => {
-							console.log("Get People:\n", err);
-						});
-						request.end();
-					}, 10000);
-			});
+					request.end();
+				}, 10000);
 		});
 	}
 	createSessionInfo(options: SessionInfoOptions): SessionInfo {
@@ -613,4 +569,4 @@ class Session extends events.EventEmitter {
 		createSessionRequest.end();
 	}
 }
-export { Session, XboxLive };
+export { Session };
