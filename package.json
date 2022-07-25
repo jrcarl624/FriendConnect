@@ -14,9 +14,9 @@
   "license": "GLPv3",
   "dependencies": {
     "bedrock-protocol": "^3.14.0",
+    "prismarine-auth": "^1.5.4",
     "unirest": "^0.6.0",
-    "websocket": "^1.0.34",
-    "prismarine-auth": "^1.5.4"
+    "websocket": "^1.0.34"
   },
   "repository": "https://github.com/minerj101/FriendConnect",
   "keywords": [
@@ -28,7 +28,6 @@
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@types/websocket": "^1.0.5",
-    "friend-connect": "^0.1.9",
     "ts-node": "^10.8.1"
   }
 }
