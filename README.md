@@ -18,10 +18,8 @@ The best way to use this tool at the moment is as a node module. Read the tutori
 
 ## How to use it:
 
-You can use any tool to get the token, for this tutorial I will use prismarine-auth.
-
 ```tty
-$ npm install friend-connect prismarine-auth
+$ npm install friend-connect
 ```
 
 Create a file and name it whatever you want.
@@ -29,13 +27,6 @@ Then paste this example into it:
 
 ```js
 import { Session } from "friend-connect";
-import auth from "prismarine-auth";
-const { Authflow, Titles } = auth;
-
-const token = await new Authflow("TailvileMC", "./auth", {
-	authTitle: Titles.MinecraftNintendoSwitch,
-	deviceType: "Nintendo",
-}).getXboxToken();
 
 new Session(
 	{
@@ -55,8 +46,7 @@ new Session(
 		connectionType: 6, // I don't recommend changing this.
 		keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
 		autoFriending: true, // Set this to true if you want to automatically add people who follow you
-	},
-	token
+	}
 );
 ```
 
