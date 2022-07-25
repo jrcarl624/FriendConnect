@@ -4,3 +4,4 @@ test/index.js
 .vscode/
 *live-cache.json
 *xbl-cache.json
+auth/
