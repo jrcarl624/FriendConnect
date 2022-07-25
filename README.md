@@ -41,11 +41,17 @@ new Session(
 		maxPlayers: 20, // Used as a fallback if pinging the server fails.
 
 		ip: "example.com", // The ip of the server you are using.
-		port: 19132,
-		log: true,
+		port: 19132, // The port of the server you are using.
+
+		log: true, // If you want to see the console output set to true.
+
 		connectionType: 6, // I don't recommend changing this.
+
 		keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
-		autoFriending: true, // Set this to true if you want to automatically add people who follow you
+
+		autoFriending: true, // Set this to true if you want to automatically add people who follow you.
+
+		email: "email@example.com", // The email address of the alt account you are using.
 	}
 );
 ```
