@@ -36,6 +36,7 @@ interface SessionInfoOptions {
 	log?: boolean;
 	connectionType: number;
 	autoFriending: boolean;
+	email: string;
 }
 
 interface Connection {
@@ -111,6 +112,7 @@ interface SessionInfo {
 	connectionId: string;
 	connectionType: number;
 	autoFriending: boolean;
+	log: boolean;
 }
 
 interface Token {
@@ -157,14 +159,13 @@ const XboxLive = class {
 		this.token = token;
 	} //TODO: Add Error handling to each
 	addFriend(xuid: string) {
-		let options = {
-			method: "PUT",
-			headers: {
-				Authorization: this.tokenHeader,
-			},
-		};
 		https
-			.request(Constants.PEOPLE + `/xuid(${xuid})`, options, (res) => {
+			.request(Constants.PEOPLE + `/xuid(${xuid})`,  {
+				method: "PUT",
+				headers: {
+					Authorization: this.tokenHeader,
+				},
+			}, (res) => {
 				//console.log(res.statusCode, res.statusMessage);
 				res.on("error", (err) => {
 					console.log("Add Friend:\n", err);
@@ -172,15 +173,14 @@ const XboxLive = class {
 			})
 			.end();
 	}
-	removeFriend(xuid: string) {
-		let options = {
-			method: "DELETE",
-			headers: {
-				Authorization: this.tokenHeader,
-			},
-		};
+	removeFriend(xuid: string) {//TODO: fix this
 		https
-			.request(Constants.PEOPLE + `/xuid(${xuid})`, options, (res) => {
+			.request(Constants.PEOPLE + `/xuid(${xuid})`, {
+				method: "DELETE",
+				headers: {
+					Authorization: this.tokenHeader,
+				},
+			}, (res) => {
 				res.on("error", (err) => {
 					console.log("Remove Friend:\n", err);
 				});
@@ -200,7 +200,7 @@ class Session extends events.EventEmitter {
 	xblInstance;
 	constructor(options: SessionInfoOptions) {
 		super();
-		this.refreshXblToken();
+		this.refreshXblToken(options.email);
 
 		this.on("tokenRefreshed", (token) => {
 			this.token = token;
@@ -381,7 +381,7 @@ class Session extends events.EventEmitter {
 		});
 	}
 
-	async refreshXblToken() {
+	async refreshXblToken(email:string) {
 		try {
 			let authDir = fs.readdirSync("./auth");
 			let liveCache = JSON.parse(
@@ -410,7 +410,7 @@ class Session extends events.EventEmitter {
 					fs.unlinkSync(`./auth/${authDir[1]}`);
 				} catch {}
 
-				new Authflow("tailvilemc@gmail.com", "./auth", {
+				new Authflow(email, "./auth", {
 					authTitle: Titles.MinecraftNintendoSwitch,
 					deviceType: "Nintendo",
 				})
@@ -420,7 +420,7 @@ class Session extends events.EventEmitter {
 					});
 			});
 		} catch {
-			new Authflow("tailvilemc@gmail.com", "./auth", {
+			new Authflow(email, "./auth", {
 				authTitle: Titles.MinecraftNintendoSwitch,
 				deviceType: "Nintendo",
 			})
@@ -449,10 +449,11 @@ class Session extends events.EventEmitter {
 			keepVersionAndProtocolConstant:
 				options.keepVersionAndProtocolConstant,
 			autoFriending: options.autoFriending,
+			log: options.log,
 		};
 	}
 
-	updateSessionInfo(options: SessionInfoOptions) {
+	updateSessionInfo(options: SessionInfo) {
 		for (const key in options) {
 			this.SessionInfo[key] = options[key];
 		}
@@ -562,7 +563,7 @@ class Session extends events.EventEmitter {
 		};
 	}
 
-	async updateSession(sessionInfo?: SessionInfoOptions) {
+	async updateSession(sessionInfo?: SessionInfo) {
 		if (sessionInfo) {
 			this.getAdvertisement().then((advertisement) => {
 				sessionInfo.worldName =
