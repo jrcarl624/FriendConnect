@@ -1,6 +1,6 @@
 *live-cache.json
 *xbl-cache.json
 *node_modules
-*package-lock.json
+package-lock.json
 *auth
 *dist

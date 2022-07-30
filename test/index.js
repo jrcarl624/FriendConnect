@@ -1,17 +1,19 @@
 import { Session } from "../dist/index.js";
-
+import { config } from "dotenv";
+config();
 new Session({
-	hostName: "Tailvile.xyz",
-	worldName: "Fun Fact: Tailvile is almost 2 years old.",
-	version: "1.19.10",
+	hostName: "FriendConnect Testing Instance",
+	worldName: "Hello World",
+	version: "1.19.11",
 	protocol: 534,
 	players: 0,
 	maxPlayers: 20,
-	ip: "tailvile.xyz",
-	port: 19132,
+	ip: process.env.IP,
+	port: process.env.PORT,
 	log: true,
 	connectionType: 6,
 	keepVersionAndProtocolConstant: true,
 	autoFriending: true,
-	email:"tailvilemc@gmail.com",
+	email: process.env.EMAIL,
+	tokenPath: "./auth",
 });

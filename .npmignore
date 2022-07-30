@@ -5,3 +5,4 @@ test/index.js
 *live-cache.json
 *xbl-cache.json
 auth/
+src/

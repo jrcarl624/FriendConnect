@@ -28,32 +28,32 @@ Then paste this example into it:
 ```js
 import { Session } from "friend-connect";
 
-new Session(
-	{
-		hostName: "Server Name", // The hostname of the server
-		worldName: "Message of the Day: Hello World", // Use as a MOTD
+new Session({
+	hostName: "Server Name", // The hostname of the server
+	worldName: "Message of the Day: Hello World", // Use as a MOTD
 
-		version: "1.19.10", //The client of the server you are connecting to.
+	version: "1.19.10", //The client of the server you are connecting to.
 
-		protocol: 534, //The protocol of the server you are connecting to.
+	protocol: 534, //The protocol of the server you are connecting to.
 
-		players: 0, // Used as a fallback if pinging the server fails.
-		maxPlayers: 20, // Used as a fallback if pinging the server fails.
+	players: 0, // Used as a fallback if pinging the server fails.
+	maxPlayers: 20, // Used as a fallback if pinging the server fails.
 
-		ip: "example.com", // The ip of the server you are using.
-		port: 19132, // The port of the server you are using.
+	ip: "example.com", // The ip of the server you are using.
+	port: 19132, // The port of the server you are using.
 
-		log: true, // If you want to see the console output set to true.
+	log: true, // If you want to see the console output set to true.
 
-		connectionType: 6, // I don't recommend changing this.
+	connectionType: 6, // I don't recommend changing this.
 
-		keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
+	keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
 
-		autoFriending: true, // Set this to true if you want to automatically add people who follow you.
+	autoFriending: true, // Set this to true if you want to automatically add people who follow you.
 
-		email: "email@example.com", // The email address of the alt account you are using.
-	}
-);
+	email: "email@example.com", // The email address of the alt account you are using.
+
+	tokenPath: "./auth", // The path to the file that contains the authentication tokens.
+});
 ```
 
 Set `type` to `module` in the package.json file.
@@ -66,13 +66,25 @@ You can run the file with `node --es-module-specifier-resolution=node ./path/to/
 -   [x] Add automatically querying the player numbers from the server on session Update.
 -   [ ] Add the ability to provide an array of strings to be chosen from for the hostName and worldName that is rotated through on session Update.
 -   [ ] Check if the user owns any games if so send an error telling them to use an alt account.
+    > I was unable to get the games owned, but I do check if there are achievements on the profile.
 -   [x] Add an option to disable auto friending.
 -   [ ] Make a user friendly way to use this tool like a discord bot or something.
 -   [ ] Add a cli tool maybe.
 
+## Testing
+
+If you are contributing to this project, make a `.env` file in the root directory.
+This file is used in `./test/index.js` to test the tool.
+
+```js
+IP = "example.com";
+PORT = 19132;
+EMAIL = "example@example.com";
+```
+
 ## Credit
 
-This project is a js port of the [rtm516/MCXboxBroadcast](https://github.com/rtm516/MCXboxBroadcast) from java.
+This project is inspired by and is a js port of the [rtm516/MCXboxBroadcast](https://github.com/rtm516/MCXboxBroadcast) from java.
 
 Friend Connect adds a key feature that makes the friending automated.
 

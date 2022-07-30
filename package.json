@@ -1,6 +1,6 @@
 {
   "name": "friend-connect",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "",
   "main": "./dist/index.js",
   "type": "module",
@@ -28,6 +28,7 @@
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@types/websocket": "^1.0.5",
+    "dotenv": "^16.0.1",
     "ts-node": "^10.8.1"
   }
 }

@@ -21,9 +21,17 @@ const Constants = {
 	RTA_SOCKET: "wss://rta.xboxlive.com/socket",
 	LIVE_TOKEN_REQUEST: "https://login.live.com/oauth20_token.srf",
 	AUTH_TITLE: "00000000441cc96b", // Nintendo Switch Title ID
+	DEBUG: false,
+};
+
+const debug = (...args) => {
+	if (Constants.DEBUG) {
+		console.log(...args);
+	}
 };
 
 interface SessionInfoOptions {
+	tokenPath: fs.PathLike;
 	keepVersionAndProtocolConstant: boolean;
 	hostName: string;
 	worldName: string;
@@ -150,44 +158,75 @@ interface PeopleList {
 	people: People[];
 }
 
-const XboxLive = class {
+class XboxLive {
 	token: Token;
+
 	get tokenHeader(): string {
 		return `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`;
 	}
 	constructor(token: Token) {
 		this.token = token;
 	} //TODO: Add Error handling to each
+
 	addFriend(xuid: string) {
 		https
-			.request(Constants.PEOPLE + `/xuid(${xuid})`,  {
-				method: "PUT",
-				headers: {
-					Authorization: this.tokenHeader,
+			.request(
+				Constants.PEOPLE + `/xuid(${xuid})`,
+				{
+					method: "PUT",
+					headers: {
+						Authorization: this.tokenHeader,
+					},
 				},
-			}, (res) => {
-				//console.log(res.statusCode, res.statusMessage);
-				res.on("error", (err) => {
-					console.log("Add Friend:\n", err);
-				});
-			})
+				(res) => {
+					//console.log(res.statusCode, res.statusMessage);
+					res.on("error", (err) => {
+						console.log("Add Friend:\n", err);
+					});
+				}
+			)
 			.end();
 	}
-	removeFriend(xuid: string) {//TODO: fix this
+	removeFriend(xuid: string) {
+		//TODO: fix this
 		https
-			.request(Constants.PEOPLE + `/xuid(${xuid})`, {
-				method: "DELETE",
-				headers: {
-					Authorization: this.tokenHeader,
+			.request(
+				Constants.PEOPLE + `/xuid(${xuid})`,
+				{
+					method: "DELETE",
+					headers: {
+						Authorization: this.tokenHeader,
+					},
 				},
-			}, (res) => {
-				res.on("error", (err) => {
-					console.log("Remove Friend:\n", err);
-				});
-			})
+				(res) => {
+					res.on("error", (err) => {
+						console.log("Remove Friend:\n", err);
+					});
+				}
+			)
 			.end();
 	}
-};
+
+	async getProfile(xuid: string) {
+		https
+			.request(
+				Constants.PEOPLE + `/xuid(${xuid})`,
+				{
+					method: "GET",
+					headers: {
+						Authorization: this.tokenHeader,
+					},
+				},
+				(res) => {
+					//console.log(res.statusCode, res.statusMessage);
+					res.on("error", (err) => {
+						console.log("Get Profile:\n", err);
+					});
+				}
+			)
+			.end();
+	}
+}
 
 //console.log(new XboxLive(token).tokenHeader);
 
@@ -197,16 +236,39 @@ class Session extends events.EventEmitter {
 	SessionInfo: SessionInfo;
 	sessionStarted: boolean = false;
 	token: Token;
-	xblInstance;
+	xblInstance: XboxLive;
+
+	log: boolean = false;
+
+	stopped = false;
+	profileName: any;
 	constructor(options: SessionInfoOptions) {
 		super();
-		this.refreshXblToken(options.email);
 
-		this.on("tokenRefreshed", (token) => {
-			this.token = token;
-			console.log("Connecting...");
+		if (!options.email) throw new Error("Email is required");
+
+		if (!options.connectionType)
+			throw new Error("Connection Type is required");
+
+		if (!options.ip) throw new Error("IP is required");
+
+		if (!options.port) throw new Error("Port is required");
+
+		if (!options.tokenPath) throw new Error("Token Path is required");
+
+		if (!options.hostName)
+			options.hostName = "Edit, Hostname to change this";
+
+		if (!options.worldName)
+			options.worldName = "Edit, World Name to change this";
+
+		if (options.log) this.log = true;
+
+		this.refreshXblToken(options.email, options.tokenPath);
+
+		this.on("tokenRefreshed", () => {
+			console.log("[FriendConnect] Connecting to RTA Websocket");
 			this.SessionInfo = this.createSessionInfo(options);
-			this.xblInstance = new XboxLive(this.token);
 			var ws = new W3CWebSocket(
 				"wss://rta.xboxlive.com/connect",
 				"echo-protocol",
@@ -216,33 +278,41 @@ class Session extends events.EventEmitter {
 				}
 			);
 			ws.onerror = (error) => {
-				console.log("Error: ", error.message);
-				console.log("Connection Error");
+				console.error("[FriendConnect] RTA Websocket Connection Error");
+				console.error("Error Name: ", error.name);
+				console.error("Error Message: ", error.message);
+				console.error("Error Stack: ", error.stack);
+				this.messageLogger(error, undefined, "RTA Websocket");
+				this.stopped = true;
 
 				new Session(options);
 			};
 
 			ws.onopen = () => {
-				console.log("Connected");
 				ws.send(
 					'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
 				);
-				if (options.log) console.log("WebSocket Client Connected");
+				if (this.log)
+					console.log(
+						"[FriendConnect] WebSocket Client Connected to RTA"
+					);
 			};
 			ws.onclose = (event) => {
-				if (options.log) {
-					console.log("WebSocket Client Closed");
+				if (this.log) {
+					console.log("[FriendConnect] WebSocket Client Closed");
 					console.log("Code: " + event.code);
 					console.log("Reason: " + event.reason);
 					console.log("Clean Exit: " + event.wasClean);
 				}
 
-				if (options.log) console.log("Restarting...");
+				if (this.log) console.log("[FriendConnect] Restarting...");
+				this.stopped = true;
+
 				new Session(options);
 			};
 
 			ws.onmessage = (event) => {
-				if (options.log) console.log(event.data);
+				//if (this.log) console.log(event.data);
 				switch (typeof event.data) {
 					case "string":
 						const data = JSON.parse(event.data);
@@ -251,13 +321,20 @@ class Session extends events.EventEmitter {
 							this.SessionInfo.connectionId =
 								data[4].ConnectionId;
 							this.emit("connectionId");
-						} else {
-							if (options.log)
+						} else if (this.log) {
+							try {
 								console.log(
-									"----------------------------------- Start of RTA WS Message\n",
-									event.data,
-									"\n----------------------------------- End of RTA WS Message"
+									"----------------------------------- Start of RTA Websocket Message\n",
+									JSON.parse(event.data.toString()),
+									"\n----------------------------------- End of RTA Websocket Message"
 								);
+							} catch {
+								console.log(
+									"----------------------------------- Start of RTA Websocket Message\n",
+									event.data.toString(),
+									"\n----------------------------------- End of RTA Websocket Message"
+								);
+							}
 						}
 				}
 			};
@@ -268,10 +345,6 @@ class Session extends events.EventEmitter {
 			});
 			this.on("sessionUpdated", () => {
 				if (!this.sessionStarted) {
-					if (options.log)
-						console.log(
-							"----------------------------------- Start of Handle Request"
-						);
 					var createHandleRequestOptions = {
 						method: "POST",
 						headers: {
@@ -298,9 +371,10 @@ class Session extends events.EventEmitter {
 							//console.log("statusCode:", res.statusCode);
 							//console.log("headers:", res.headers);
 							res.on("data", (data) => {
-								if (options.log)
+								if (this.log)
 									console.log(
-										data.toString(),
+										"----------------------------------- Start of Handle Request\n",
+										JSON.parse(data.toString()),
 										"\n----------------------------------- End of Handle Request"
 									);
 							});
@@ -311,9 +385,12 @@ class Session extends events.EventEmitter {
 						JSON.stringify(createHandleContent)
 					);
 
-					createHandleRequest.on("error", (e) => {
-						//console.error(e);
-						//console.log("----------------------------------- End of Handle Request");
+					createHandleRequest.on("error", (error) => {
+						this.messageLogger(
+							error,
+							undefined,
+							"createHandleRequest"
+						);
 					});
 					createHandleRequest.end();
 					this.sessionStarted = true;
@@ -321,71 +398,136 @@ class Session extends events.EventEmitter {
 				}
 			});
 			this.on("sessionStarted", () => {
-				if (options.log) console.log("Session started");
+				if (this.log) console.log("[FriendConnect] Session started");
 
 				setInterval(() => {
-					this.updateSession(this.SessionInfo);
-				}, 60000);
+					if (!this.stopped) this.updateSession(this.SessionInfo);
+				}, 30000);
+
 				if (options.autoFriending)
 					setInterval(() => {
-						if (options.log) console.log("Friend Interval");
-						let request = https.request(
-							Constants.PEOPLE_HUB + "/followers",
-							{
-								method: "GET",
-								headers: {
-									Authorization: this.xblInstance.tokenHeader,
-									"x-xbl-contract-version": 5,
-									"Accept-Language": "en-us",
+						if (!this.stopped) {
+							if (this.log)
+								console.log(
+									"[FriendConnect] AutoFriend Interval"
+								);
+							let request = https.request(
+								Constants.PEOPLE_HUB + "/followers",
+								{
+									method: "GET",
+									headers: {
+										Authorization:
+											this.xblInstance.tokenHeader,
+										"x-xbl-contract-version": 5,
+										"Accept-Language": "en-us",
+									},
 								},
-							},
-							(res) => {
-								//console.log(res.statusCode, res.statusMessage);
-								var body = "";
-								res.on("data", function (chunk) {
-									body += chunk;
-								});
+								(res) => {
+									//console.log(res.statusCode, res.statusMessage);
+									var body = "";
+									res.on("data", function (chunk) {
+										body += chunk;
+									});
 
-								res.on("end", () => {
-									try {
-										let data: PeopleList = JSON.parse(body);
-
-										for (let i of data.people) {
-											if (i.isFollowingCaller) {
-												if (!i.isFollowedByCaller)
-													this.xblInstance.addFriend(
+									res.on("end", () => {
+										try {
+											let data: PeopleList =
+												JSON.parse(body);
+											if (this.log)
+												console.log(
+													`[FriendConnect] ${data.people.length} profile(s) have the host profile friended.` //followed ${this.profileName}
+												);
+											for (let i of data.people) {
+												if (i.isFollowingCaller) {
+													if (!i.isFollowedByCaller)
+														this.xblInstance.addFriend(
+															i.xuid
+														);
+												} else {
+													this.xblInstance.removeFriend(
 														i.xuid
 													);
-											} else {
-												this.xblInstance.removeFriend(
-													i.xuid
-												);
+												}
 											}
+										} catch (error) {
+											console.error(
+												"[FriendConnect] AutoFriend Interval Error"
+											);
+											console.error(
+												"Error Name: ",
+												error.name
+											);
+											console.error(
+												"Error Message: ",
+												error.message
+											);
+											console.error(
+												"Error Stack: ",
+												error.stack
+											);
+											this.messageLogger(
+												error,
+												undefined,
+												"AutoFriend Interval"
+											);
 										}
-									} catch (e) {
-										console.log(e);
-									}
-								});
+									});
 
-								res.on("error", (err) => {
-									console.log("Get People:\n", err);
-								});
-							}
-						);
-						request.on("error", (err) => {
-							console.log("Get People:\n", err);
-						});
-						request.end();
+									res.on("error", (error) => {
+										console.error(
+											"[FriendConnect] AutoFriend Interval Error"
+										);
+										console.error(
+											"Error Name: ",
+											error.name
+										);
+										console.error(
+											"Error Message: ",
+											error.message
+										);
+										console.error(
+											"Error Stack: ",
+											error.stack
+										);
+										this.messageLogger(
+											error,
+											undefined,
+											"AutoFriend Interval"
+										);
+									});
+								}
+							);
+							request.on("error", (error) => {
+								console.error(
+									"[FriendConnect] AutoFriend Interval Error"
+								);
+								console.error("Error Name: ", error.name);
+								console.error("Error Message: ", error.message);
+								console.error("Error Stack: ", error.stack);
+								this.messageLogger(
+									error,
+									undefined,
+									"AutoFriend Interval"
+								);
+							});
+							request.end();
+						}
 					}, 10000);
 			});
 		});
 	}
 
-	async refreshXblToken(email:string) {
+	async refreshXblToken(email: string, tokenPath: fs.PathLike) {
 		try {
-			let authDir = fs.readdirSync("./auth");
+			let authDir = fs.readdirSync(tokenPath);
+
+			if (authDir.length > 2) {
+				throw new Error(
+					"You may only have one account in your auth directory."
+				);
+			}
 			let liveCache = JSON.parse(
-				fs.readFileSync(`./auth/${authDir[0]}`, "utf8")
+				fs.readFileSync(`${tokenPath}${authDir[0]}`, "utf8")
 			);
 
 			const req = uniRest("POST", Constants.LIVE_TOKEN_REQUEST);
@@ -402,36 +544,81 @@ class Session extends events.EventEmitter {
 			});
 			req.end((res) => {
 				fs.writeFileSync(
-					`./auth/${authDir[0]}`,
+					`${tokenPath}${authDir[0]}`,
 					JSON.stringify({ token: res.body }),
 					"utf8"
 				);
 				try {
-					fs.unlinkSync(`./auth/${authDir[1]}`);
+					fs.unlinkSync(`${tokenPath}${authDir[1]}`);
 				} catch {}
 
-				new Authflow(email, "./auth", {
-					authTitle: Titles.MinecraftNintendoSwitch,
-					deviceType: "Nintendo",
-				})
-					.getXboxToken()
-					.then((token) => {
-						this.emit("tokenRefreshed", token);
-					});
+				this.getXblTokenAndCheckAchievements(email, tokenPath);
 			});
 		} catch {
-			new Authflow(email, "./auth", {
-				authTitle: Titles.MinecraftNintendoSwitch,
-				deviceType: "Nintendo",
-			})
-				.getXboxToken()
-				.then((token) => {
-					this.emit("tokenRefreshed", token);
-				});
+			this.getXblTokenAndCheckAchievements(email, tokenPath);
 		}
 	}
+
+	async getXblTokenAndCheckAchievements(
+		email: string,
+		tokenPath: fs.PathLike
+	) {
+		if (this.log) console.log("[FriendConnect] Getting XboxLive Token");
+		//@ts-ignore
+		new Authflow(email, tokenPath, {
+			authTitle: Titles.MinecraftNintendoSwitch,
+			deviceType: "Nintendo",
+		})
+			.getXboxToken()
+			.then((token) => {
+				this.xblInstance = new XboxLive(token);
+				this.token = token;
+
+				const req = https.request(
+					`https://achievements.xboxlive.com/users/xuid(${this.xblInstance.token.userXUID})/achievements`,
+					{
+						method: "GET",
+						headers: {
+							Authorization: this.xblInstance.tokenHeader,
+							"x-xbl-contract-version": "5",
+							"Content-Length": "7",
+						},
+					},
+					(res) => {
+						const chunks = [];
+
+						res.on("data", function (chunk) {
+							chunks.push(chunk);
+						});
+
+						res.on("end", () => {
+							if (this.log)
+								console.log(
+									"[FriendConnect] Checking for Achievements"
+								);
+							const body = Buffer.concat(chunks).toString();
+							const data = JSON.parse(body);
+							debug(data);
+							if (data.achievements.length === 0) {
+								debug;
+								this.emit("tokenRefreshed", token);
+							} else {
+								throw new Error(
+									"This account has achievements, please use an alt account without achievements to protect your account."
+								);
+							}
+						});
+					}
+				);
+				req.end();
+				req.on("error", (err) => {
+					debug(err);
+				});
+			});
+	}
+
 	createSessionInfo(options: SessionInfoOptions): SessionInfo {
-		if (options.log) console.log("Creating Session Info");
+		if (this.log) console.log("[FriendConnect] Creating Session Info");
 		return {
 			hostName: options.hostName,
 			worldName: options.worldName,
@@ -449,8 +636,41 @@ class Session extends events.EventEmitter {
 			keepVersionAndProtocolConstant:
 				options.keepVersionAndProtocolConstant,
 			autoFriending: options.autoFriending,
-			log: options.log,
+			log: this.log,
 		};
+	}
+
+	messageLogger(
+		error: Error,
+		wsClose: wsPkg.ICloseEvent,
+		source: string
+	): void {
+		if (this.log) {
+			if (!fs.existsSync("./error.log")) {
+				fs.writeFileSync(
+					"./friend-connect.log",
+					"If restarting does not fix your error, submit this file in an github issue. https://github.com/minerj101/FriendConnect.\n-------------------------------------------------------\n",
+					"utf8"
+				);
+			}
+
+			let message: string;
+			if (wsClose)
+				message = `\n[${Date.toString()}] Websocket Close:\n
+		Code: ${wsClose.code}\n
+		Reason: ${wsClose.reason}\n
+		WasClean: ${wsClose.wasClean}\n
+		\n---------------------------------`;
+
+			if (error)
+				message = `\n[${Date.toString()}] ${source} Error:\n
+		Name: ${error.name}\n
+		Message: ${error.message}\n
+		Stack: ${error.stack}\n
+		\n---------------------------------`;
+
+			fs.appendFileSync("./friend-connect.log", message, "utf8");
+		}
 	}
 
 	updateSessionInfo(options: SessionInfo) {
@@ -488,7 +708,7 @@ class Session extends events.EventEmitter {
 
 	async createSessionRequest(): Promise<SessionRequestOptions> {
 		//TODO: delete this
-		console.log("Creating Session Request");
+		console.log("[FriendConnect] Creating Session Request");
 
 		const info = await this.getAdvertisement();
 
@@ -576,13 +796,30 @@ class Session extends events.EventEmitter {
 					sessionInfo.maxPlayers),
 					(sessionInfo.version = advertisement.version);
 				sessionInfo.protocol = advertisement.protocol;
-				console.log(advertisement);
+
+				if (this.log)
+					console.log(
+						"----------------------------------- Start of Server Advertisement\n",
+						JSON.parse(
+							JSON.stringify(advertisement).replace(
+								"ServerAdvertisement",
+								""
+							)
+						),
+						"\n----------------------------------- End of Server Advertisement"
+					);
+
 				this.updateSessionInfo(sessionInfo);
-				console.log(this.SessionInfo);
+				if (this.log)
+					console.log(
+						"----------------------------------- Start of Session Info\n",
+						this.SessionInfo,
+						"\n----------------------------------- End of Session Info"
+					);
 			});
 		}
 
-		if (sessionInfo && sessionInfo.log) console.log("updateSession");
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
 
 		var createSessionContent = await this.createSessionRequest();
 		//console.log(createSessionContent);
@@ -603,34 +840,37 @@ class Session extends events.EventEmitter {
 			this.SessionInfo.sessionId;
 
 		const createSessionRequest = https.request(uri, options, (res) => {
-			if (sessionInfo && sessionInfo.log)
-				console.log(
-					"----------------------------------- Start of Update Session"
-				);
-			if (sessionInfo && sessionInfo.log)
-				console.log("statusCode:", res.statusCode);
+			//console.log("statusCode:", res.statusCode);
 			//console.log("headers:", res.headers);
 
 			res.on("data", (d) => {
-				if (sessionInfo && sessionInfo.log) console.log("data:", d);
 				if (sessionInfo && sessionInfo.log)
 					console.log(
-						"----------------------------------- End of Update Session"
+						"----------------------------------- Start of Update Session\n",
+						JSON.parse(d.toString()),
+						"\n----------------------------------- End of Update Session"
 					);
 				this.emit("sessionUpdated");
 			});
 
 			res.on("error", (err) => {
-				console.error(err);
-				console.log(
-					"----------------------------------- End of Update Session"
+				console.error(
+					"----------------------------------- Start of Update Session Error\n",
+					err,
+					"\n----------------------------------- End of Update Session Error"
 				);
+				this.messageLogger(err, undefined, "Update Session");
 			});
 		});
 		createSessionRequest.write(JSON.stringify(createSessionContent));
 
-		createSessionRequest.on("error", (e) => {
-			console.error("createSessionRequest Error: ", e);
+		createSessionRequest.on("error", (error) => {
+			console.error(
+				"----------------------------------- Start of createSessionRequest Error\n",
+				error,
+				"\n----------------------------------- End of createSessionRequest Error"
+			);
+			this.messageLogger(error, undefined, "createSessionRequest");
 		});
 		createSessionRequest.end();
 	}
