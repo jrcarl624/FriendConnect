@@ -6,3 +6,4 @@ test/index.js
 *xbl-cache.json
 auth/
 src/
+env

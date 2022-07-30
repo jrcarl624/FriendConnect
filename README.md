@@ -12,6 +12,11 @@ This is a project for minecraft bedrock that allows you to join servers via the 
 
 The best way to use this tool at the moment is as a node module. Read the tutorial below for more information of how to set this up.
 
+## Discord
+
+If you want to be notified when any changes occur to this project, you can join the discord server.
+**_[FriendConnect Support Server Invite](https://discord.gg/NSkPAGpu)_**
+
 ## How it works in game
 
 [![A New Realms Replacement, A new method for joining servers on console.](https://res.cloudinary.com/marcomontalbano/image/upload/v1657258514/video_to_markdown/images/youtube--77qXotN9jGo-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/77qXotN9jGo "A New Realms Replacement, A new method for joining servers on console.")
