@@ -242,6 +242,9 @@ class Session extends events.EventEmitter {
 
 	stopped = false;
 	profileName: any;
+
+	refreshTime: number;
+
 	constructor(options: SessionInfoOptions) {
 		super();
 
@@ -397,12 +400,19 @@ class Session extends events.EventEmitter {
 					this.emit("sessionStarted");
 				}
 			});
+
 			this.on("sessionStarted", () => {
 				if (this.log) console.log("[FriendConnect] Session started");
 
 				setInterval(() => {
 					if (!this.stopped) this.updateSession(this.SessionInfo);
 				}, 30000);
+
+				setInterval(() => {
+					if (Date.now() + 1800000 >= this.refreshTime) {
+						this.refreshXblToken(options.email, options.tokenPath);
+					}
+				}, 60000 * 60);
 
 				if (options.autoFriending)
 					setInterval(() => {
@@ -600,8 +610,11 @@ class Session extends events.EventEmitter {
 							const data = JSON.parse(body);
 							debug(data);
 							if (data.achievements.length === 0) {
-								debug;
-								this.emit("tokenRefreshed", token);
+								if (!this.sessionStarted) {
+									this.emit("tokenRefreshed", token);
+								} else {
+									this.token = token;
+								}
 							} else {
 								throw new Error(
 									"This account has achievements, please use an alt account without achievements to protect your account."
