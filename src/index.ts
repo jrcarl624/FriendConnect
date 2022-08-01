@@ -280,6 +280,10 @@ class Session extends events.EventEmitter {
 					Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
 				}
 			);
+			let liveCache = JSON.parse(fs.readdirSync(options.tokenPath)[0]);
+			this.refreshTime =
+				liveCache.token.expires_in + liveCache.obtainedOn;
+
 			ws.onerror = (error) => {
 				console.error("[FriendConnect] RTA Websocket Connection Error");
 				console.error("Error Name: ", error.name);
