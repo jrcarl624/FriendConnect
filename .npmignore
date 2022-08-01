@@ -6,4 +6,6 @@ test/index.js
 *xbl-cache.json
 auth/
 src/
-env
+.env
+CODE_OF_CONDUCT.md
+tsconfig.json
