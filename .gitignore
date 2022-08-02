@@ -4,4 +4,4 @@
 package-lock.json
 *auth
 *dist
-env
+.env

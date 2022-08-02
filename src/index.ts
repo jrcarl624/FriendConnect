@@ -235,9 +235,7 @@ class XboxLive {
 class Session extends events.EventEmitter {
 	SessionInfo: SessionInfo;
 	sessionStarted: boolean = false;
-	token: Token;
 	xblInstance: XboxLive;
-
 	log: boolean = false;
 
 	stopped = false;
@@ -277,12 +275,20 @@ class Session extends events.EventEmitter {
 				"echo-protocol",
 				undefined,
 				{
-					Authorization: `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`,
+					Authorization: this.xblInstance.tokenHeader,
 				}
 			);
-			let liveCache = JSON.parse(fs.readdirSync(options.tokenPath)[0]);
+
+			let liveCache = JSON.parse(
+				fs.readFileSync(
+					options.tokenPath +
+						"/" +
+						fs.readdirSync(options.tokenPath)[0],
+					"utf8"
+				)
+			);
 			this.refreshTime =
-				liveCache.token.expires_in + liveCache.obtainedOn;
+				liveCache.token.expires_in * 1000 + liveCache.obtainedOn;
 
 			ws.onerror = (error) => {
 				console.error("[FriendConnect] RTA Websocket Connection Error");
@@ -290,7 +296,7 @@ class Session extends events.EventEmitter {
 				console.error("Error Message: ", error.message);
 				console.error("Error Stack: ", error.stack);
 				this.messageLogger(error, undefined, "RTA Websocket");
-				this.stopped = true;
+				//this.stopped = true;
 
 				new Session(options);
 			};
@@ -313,7 +319,7 @@ class Session extends events.EventEmitter {
 				}
 
 				if (this.log) console.log("[FriendConnect] Restarting...");
-				this.stopped = true;
+				//this.stopped = true;
 
 				new Session(options);
 			};
@@ -413,10 +419,10 @@ class Session extends events.EventEmitter {
 				}, 30000);
 
 				setInterval(() => {
-					if (Date.now() + 1800000 >= this.refreshTime) {
+					if (Date.now() + 85000000 >= this.refreshTime) {
 						this.refreshXblToken(options.email, options.tokenPath);
 					}
-				}, 60000 * 60);
+				}, 5000000);
 
 				if (options.autoFriending)
 					setInterval(() => {
@@ -585,15 +591,14 @@ class Session extends events.EventEmitter {
 		})
 			.getXboxToken()
 			.then((token) => {
-				this.xblInstance = new XboxLive(token);
-				this.token = token;
+				let achievementXblInstance = new XboxLive(token);
 
 				const req = https.request(
-					`https://achievements.xboxlive.com/users/xuid(${this.xblInstance.token.userXUID})/achievements`,
+					`https://achievements.xboxlive.com/users/xuid(${achievementXblInstance.token.userXUID})/achievements`,
 					{
 						method: "GET",
 						headers: {
-							Authorization: this.xblInstance.tokenHeader,
+							Authorization: achievementXblInstance.tokenHeader,
 							"x-xbl-contract-version": "5",
 							"Content-Length": "7",
 						},
@@ -614,10 +619,9 @@ class Session extends events.EventEmitter {
 							const data = JSON.parse(body);
 							debug(data);
 							if (data.achievements.length === 0) {
+								this.xblInstance = achievementXblInstance;
 								if (!this.sessionStarted) {
 									this.emit("tokenRefreshed", token);
-								} else {
-									this.token = token;
 								}
 							} else {
 								throw new Error(
@@ -647,7 +651,7 @@ class Session extends events.EventEmitter {
 			port: options.port,
 			rakNetGUID: "",
 			sessionId: crypto.randomUUID(),
-			xuid: this.token.userXUID,
+			xuid: this.xblInstance.token.userXUID,
 			connectionId: "",
 			connectionType: options.connectionType,
 			keepVersionAndProtocolConstant:
