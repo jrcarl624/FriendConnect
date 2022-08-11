@@ -14,7 +14,7 @@ The best way to use this tool at the moment is as a node module. Read the tutori
 
 ## Discord
 
-If you want to be notified when any changes occur to this project, you can join the discord server.
+If you want to be notified when any changes occur to this project, you can join the discord server.<br>
 **_[FriendConnect Support Server Invite](https://discord.gg/NSkPAGpu)_**
 
 ## How it works in game
