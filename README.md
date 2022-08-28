@@ -55,7 +55,7 @@ new Session({
 
 	tokenPath: "./auth", // The path to the directory that contains the authentication tokens.
 
-	accounts: [process.env.EMAIL, "tailvilemc@gmail.com"], // A list of emails that correspond to accounts you want to use with FriendConnect
+	accounts: ["example.com", "example.com"], // A list of emails that correspond to accounts you want to use with FriendConnect.
 
 	//These are values retrieved from the server on when the server advertisement is fetched, if true it will use a value from above.
 	constants: {
