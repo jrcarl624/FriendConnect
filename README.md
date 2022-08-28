@@ -1,14 +1,16 @@
-# Friend Connect
+# FriendConnect
 
 ## WARNING
 
-BEFORE YOU USE THIS TOOL, PLEASE READ THE FOLLOWING:
+**BEFORE YOU USE THIS TOOL, PLEASE READ THE FOLLOWING:
 WE _AS CONTRIBUTORS_ ARE NOT RESPONSIBLE FOR ANY DAMAGE OR LOSS CAUSED BY THIS APP.
-USE AN ALT ACCOUNT, JUST IN CASE THERE IS AN ISSUE WITH THIS METHOD.
+USE AN ALT ACCOUNT, JUST IN CASE THERE IS AN ISSUE WITH THIS METHOD.**
 
 ## About
 
-This is a project for minecraft bedrock that allows you to join servers via the in game friends tab. Allowing console players to connect to servers. This project is still in development, so please be patient if there are issues.
+This is a project for minecraft bedrock/(java with geyser) that allows you to join servers via the in game friends tab. The most notable differing factor is, that console players can connect to servers without using an advanced method.
+
+This project is still in development, so please be patient if there are issues.
 
 The best way to use this tool at the moment is as a node module. Read the tutorial below for more information of how to set this up.
 
@@ -36,28 +38,34 @@ import { Session } from "friend-connect";
 new Session({
 	hostName: "Server Name", // The hostname of the server
 	worldName: "Message of the Day: Hello World", // Use as a MOTD
+	version: "1.19.21", // The version of the session, this can be any string.
 
-	version: "1.19.10", //The client of the server you are connecting to.
+	protocol: 545, //The protocol of the server you are connecting to.
 
-	protocol: 534, //The protocol of the server you are connecting to.
-
-	players: 0, // Used as a fallback if pinging the server fails.
-	maxPlayers: 20, // Used as a fallback if pinging the server fails.
+	connectedPlayers: 0, // Used as a fallback if pinging the server fails.
+	maxConnectedPlayers: 40, // Used as a fallback if pinging the server fails.
 
 	ip: "example.com", // The ip of the server you are using.
 	port: 19132, // The port of the server you are using.
-
-	log: true, // If you want to see the console output set to true.
-
 	connectionType: 6, // I don't recommend changing this.
 
-	keepVersionAndProtocolConstant: true, // Set this to true if you want to set a constant protocol version. Otherwise it will ping the server to get the protocol version and use the one above if the server has an error on ping.
+	log: true, // If you want to see the console output set to true.
+	joinability: "joinable_by_friends", // The joinability of the session, if this is changed only one account can be used to connect to the session.
+	autoFriending: true, // Set this to true if you want to automatically add people who follow the accounts.
 
-	autoFriending: true, // Set this to true if you want to automatically add people who follow you.
+	tokenPath: "./auth", // The path to the directory that contains the authentication tokens.
 
-	email: "email@example.com", // The email address of the alt account you are using.
+	accounts: [process.env.EMAIL, "tailvilemc@gmail.com"], // A list of emails that correspond to accounts you want to use with FriendConnect
 
-	tokenPath: "./auth", // The path to the file that contains the authentication tokens.
+	//These are values retrieved from the server on when the server advertisement is fetched, if true it will use a value from above.
+	constants: {
+		//worldName: true,
+		//hostName: true,
+		maxConnectedPlayers: true,
+		connectedPlayers: true,
+		//protocol: true,
+		version: true,
+	},
 });
 ```
 
@@ -81,16 +89,18 @@ You can run the file with `node --es-module-specifier-resolution=node ./path/to/
 If you are contributing to this project, make a `.env` file in the root directory.
 This file is used in `./test/index.js` to test the tool.
 
-```js
-IP = "example.com";
-PORT = 19132;
-EMAIL = "example@example.com";
+```ini
+EMAIL="emails@example.com"
+EMAIL2="emails@example.com"
+IP="example.com"
+PORT=19132
+#FRIEND_CONNECT_DEBUG=true
 ```
 
 ## Credit
 
 This project is inspired by and is a js port of the [rtm516/MCXboxBroadcast](https://github.com/rtm516/MCXboxBroadcast) from java.
 
-Friend Connect adds a key feature that makes the friending automated.
+FriendConnect adds a key feature that makes the friending automated.
 
 I worked with [rtm516](https://github.com/rtm516) to figure out the uri and headers for finding the followers of an xbox profile.

@@ -1,86 +1,107 @@
 import crypto from "crypto";
-import events from "events";
+import events, { EventEmitter } from "events";
 import fs from "fs";
-import https from "https";
+import https, { RequestOptions } from "https";
 import uniRest from "unirest";
+import path from "path";
+import {
+	ping,
+	createServer,
+	ServerAdvertisement,
+	Client,
+	Server,
+} from "bedrock-protocol";
 
-import { ping, ServerAdvertisement } from "bedrock-protocol";
+import { createHash } from "prismarine-auth/src/common/Util.js";
 
 import authPkg from "prismarine-auth";
+
 const { Authflow, Titles } = authPkg;
-
-import wsPkg from "websocket";
+import { config } from "dotenv";
+import wsPkg, { ICloseEvent, IMessageEvent } from "websocket";
+import { ClientRequest, IncomingMessage } from "http";
 const { w3cwebsocket: W3CWebSocket } = wsPkg;
-
+config();
 const Constants = {
 	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
-	PEOPLE: "https://social.xboxlive.com/users/me/people",
-	PEOPLE_HUB: "https://peoplehub.xboxlive.com/users/me/people",
-	HANDLE: "https://sessiondirectory.xboxlive.com/handles",
-	CONNECTIONS: "https://sessiondirectory.xboxlive.com/connections",
-	RTA_SOCKET: "wss://rta.xboxlive.com/socket",
 	LIVE_TOKEN_REQUEST: "https://login.live.com/oauth20_token.srf",
-	AUTH_TITLE: "00000000441cc96b", // Nintendo Switch Title ID
-	DEBUG: false,
+	CLIENT_ID: "00000000441cc96b", // Nintendo Switch Title ID
 };
 
-const debug = (...args) => {
-	if (Constants.DEBUG) {
-		console.log(...args);
+const debug = (...args: any[]) => {
+	if (process.env.FRIEND_CONNECT_DEBUG) {
+		for (let i of args) {
+			try {
+				JSON.stringify(JSON.parse(args[i]), undefined, 4);
+			} catch (e) {
+				console.log(i);
+			}
+		}
 	}
 };
 
-interface SessionInfoOptions {
-	tokenPath: fs.PathLike;
-	keepVersionAndProtocolConstant: boolean;
-	hostName: string;
-	worldName: string;
-	version: string;
-	protocol: number;
-	players: number;
-	maxPlayers: number;
-	ip: string;
-	port: number;
-	log?: boolean;
-	connectionType: number;
-	autoFriending: boolean;
-	email: string;
+const debugWrite = (
+	fileName: fs.PathOrFileDescriptor,
+	data: string | NodeJS.ArrayBufferView
+) => {
+	if (process.env.FRIEND_CONNECT_DEBUG) {
+		if (!fs.existsSync("./temp")) fs.mkdirSync("./temp");
+		fs.writeFileSync("./temp/" + fileName, data);
+	}
+};
+
+interface HttpRequestOptions extends RequestOptions {
+	body?: string | Record<string, any>;
 }
 
-interface Connection {
-	ConnectionType: number;
-	HostIpAddress: string;
-	HostPort: number;
-	RakNetGUID: string;
-}
+const request = (
+	url: string | URL,
+	options: HttpRequestOptions,
+	callback: (response: IncomingMessage) => void
+) => {
+	if (typeof options.body == "object") {
+		options.body = JSON.stringify(options.body);
+		options.headers = options.headers || {};
+		options.headers["Content-Type"] = "application/json";
+	}
 
-interface SessionRequestOptions {
+	const req = https.request(url, options, res => {
+		res.on("data", data => {
+			debug(res.statusCode);
+
+			if (
+				res.headers["content-type"] == "application/json" &&
+				res.headers["transfer-encoding"] != "chunked"
+			)
+				debug(JSON.parse(data));
+			else debug(data.toString());
+		});
+
+		if (callback) callback(res);
+	});
+	if (options.body) req.write(options.body);
+
+	return req;
+};
+
+const setQueries = (url: string, queries: Record<string, any>) => {
+	url += "?";
+
+	for (let i in queries) url += `${i}=${queries[i]}&`;
+
+	return url.slice(url.lastIndexOf("&"), url.lastIndexOf("&"));
+};
+
+type ResponseCallback = (response: IncomingMessage) => void;
+
+interface MinecraftLobbySessionRequestOptions {
 	properties: {
 		system: {
-			joinRestriction: "followed";
+			joinRestriction: "followed" | "local"; // Only present if 'visibility' is "open" or "full" and the session has a join restriction.
 			readRestriction: "followed";
-			closed: false;
+			closed: boolean;
 		};
-		custom: {
-			BroadcastSetting: 3;
-			CrossPlayDisabled: false;
-			Joinability: string | "joinable_by_friends";
-			LanGame: true;
-			MaxMemberCount: number;
-			MemberCount: number;
-			OnlineCrossPlatformGame: true;
-			SupportedConnections: Connection[];
-			TitleId: 0;
-			TransportLayer: 0;
-			levelId: "level";
-			hostName: string;
-			ownerId: string; //xuid
-			rakNetGUID: string;
-			worldName: string;
-			worldType: "Survival";
-			protocol: number;
-			version: string;
-		};
+		custom: MinecraftLobbyCustomProperties;
 	};
 	members: {
 		me: {
@@ -104,570 +125,1775 @@ interface SessionRequestOptions {
 	};
 }
 
-interface SessionInfo {
-	keepVersionAndProtocolConstant: boolean;
-	hostName: string;
-	worldName: string;
-	version: string;
-	protocol: number;
-	players: number;
-	maxPlayers: number;
-	ip: string;
-	port: number;
-	rakNetGUID: string;
-	sessionId: string;
-	xuid: string;
-	connectionId: string;
-	connectionType: number;
-	autoFriending: boolean;
-	log: boolean;
-}
-
-interface Token {
+interface XboxLiveToken {
 	userXUID: string;
 	userHash: string;
 	XSTSToken: string;
 	expiresOn: number;
 }
 
-interface sessionRef {
-	scid: string;
-	templateName: string;
+interface VerifyStringResult {
+	verifyStringResult: { resultCode: `${number}`; offendingString: string }[];
+}
+
+const VerifyStringResultCodes = {
+	0: "Success",
+	1: "Offensive string",
+	2: "String too long",
+	3: "Unknown error",
+};
+
+namespace SocialTypes {
+	export interface PeopleList {
+		people: Person[];
+		totalCount: number;
+	}
+	export interface Person {
+		xuid: string;
+		isFavorite: boolean;
+		isFollowingCaller?: boolean;
+		socialNetworks?: string[];
+	}
+	/**
+	 * @url https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/reference/live/rest/json/json-personsummary
+	 */
+	export interface PersonSummary {
+		targetFollowingCount: number;
+
+		targetFollowerCount: number;
+		/**
+		 * Whether the caller is following the target. Example values: true
+		 */
+		isCallerFollowingTarget: boolean;
+		isTargetFollowingCaller: boolean;
+		/**
+		 * Whether the caller has marked the target as a favorite. Example values: true
+		 */
+		hasCallerMarkedTargetAsFavorite: boolean;
+		/**
+		 * Whether the caller has marked the target as known. Example values: true
+		 */
+		hasCallerMarkedTargetAsKnown: boolean;
+
+		legacyFriendStatus:
+			| "None"
+			| "MutuallyAccepted"
+			| "OutgoingRequest"
+			| "IncomingRequest";
+		recentChangeCount: number;
+		watermark: string;
+	}
+}
+
+interface XuidList {
+	xuids: string[];
+}
+
+const joinChunks = (res: IncomingMessage, callback: (body: string) => void) => {
+	let chunks = "";
+
+	res.on("data", chunk => {
+		//console.log(chunk.toString());
+		chunks += chunk;
+	});
+
+	res.on("end", () => {
+		callback(chunks);
+	});
+};
+
+class Social {
+	private readonly xbox: XboxLive;
+	readonly uri: string = "https://social.xboxlive.com";
+	constructor(xboxLiveInstance: XboxLive) {
+		this.xbox = xboxLiveInstance;
+	}
+	addFriend(xuid: string, callback?: ResponseCallback) {
+		return request(
+			`${this.uri}/users/me/people/xuid(${xuid})`,
+			{
+				method: "PUT",
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+				},
+			},
+			callback
+		).end();
+	}
+	removeFriend(xuid: string, callback?: ResponseCallback) {
+		return request(
+			`${this.uri}/users/me/people/xuid(${xuid})`,
+			{
+				method: "DELETE",
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+				},
+			},
+			callback
+		).end();
+	}
+	getProfile(xuid: string, callback?: (person: SocialTypes.Person) => void) {
+		return request(
+			`${this.uri}/users/me/people/xuid(${xuid})`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+				},
+			},
+			res => {
+				joinChunks(res, data => {
+					callback(JSON.parse(data));
+				});
+			}
+		).end();
+	}
+	getProfileSummary(
+		xuid: string,
+		callback?: (summary: SocialTypes.PersonSummary) => void
+	) {
+		return request(
+			`${this.uri}/users/xuid(${xuid})/summary`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+				},
+			},
+			res => {
+				joinChunks(res, data => {
+					callback(JSON.parse(data));
+				});
+			}
+		).end();
+	}
+}
+
+/**
+ * @url https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/reference/live/rest/json/json-achievementv2s
+ */
+interface Achievement {
+	id: number;
+	serviceConfigId: string;
 	name: string;
+	titleAssociations: {
+		name: string;
+		id: number;
+		version: string;
+	}[];
+	progressState: string;
+	progression: {
+		requirements: {
+			id: string;
+			current: unknown;
+			target: string;
+		}[];
+		timeUnlocked: string;
+	};
+	mediaAssets: {
+		name: string;
+		type: string;
+		url: string;
+	}[];
+	platform: string;
+	isSecret: true;
+	description: string;
+	lockedDescription: string;
+	productId: string;
+	achievementType: string;
+	participationType: string;
+	timeWindow: {
+		startDate: string;
+		endDate: string;
+	};
+	rewards: {
+		name: unknown;
+		description: unknown;
+		value: string;
+		type: string;
+		valueType: string;
+	}[];
+	estimatedTime: string;
+	deeplink: string;
+	isRevoked: false;
+}
+class Achievements {
+	private readonly xbox: XboxLive;
+	readonly uri: string = "https://achievements.xboxlive.com";
+	constructor(xboxLiveInstance: XboxLive) {
+		this.xbox = xboxLiveInstance;
+	}
+
+	get(callback: (achievements: Achievement[]) => void): ClientRequest {
+		return request(
+			`${this.uri}/users/xuid(${this.xbox.token.userXUID})/achievements`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": "5",
+					"Content-Length": "7",
+				},
+			},
+			res => {
+				joinChunks(res, data => {
+					callback(JSON.parse(data).achievements);
+				});
+			}
+		).end();
+	}
 }
 
-interface CreateHandleRequest {
-	version: number;
-	type: string;
-	sessionRef: sessionRef;
+namespace SessionDirectoryTypes {
+	export interface MultiplayerSessionRequest {
+		/**
+		 * Read-only settings that are merged with the session template to produce the constants for the session.
+		 */
+		constants: {
+			[key: string]: any;
+		};
+		/**
+		 * Changes to be merged into the session properties.
+		 */
+		properties: {
+			[key: string]: any;
+		};
+		members: {
+			/**
+			 * Requires a service principal. Existing members can be deleted by index.
+			 * Not available on large sessions.
+			 */
+			"5": null;
+
+			/**
+			 * Reservation requests must start with zero. New users will get added in order to the end of the session's member list.
+			 * Large sessions don't support reservations.
+			 */
+			[key: `reserve_${number}`]: {
+				constants: {
+					[key: string]: any;
+				};
+			};
+
+			/**
+			 * Constants and properties that work much like their top-level counterparts. Any PUT method requires the user to be a member of the session, and adds the user if necessary. If "me" is specified as null, the member making the request is removed from the session.
+			 * Requires a user principal with a xuid claim. Can be 'null' to remove myself from the session.
+			 */
+			me: {
+				constants: {
+					[key: string]: any;
+				};
+				properties: {
+					[key: string]: any;
+				};
+			} | null;
+		};
+
+		/**
+		 * Values indicating updates and additions to the session's set of associated server participants. If a server is specified as null, that server entry is removed from the session.
+		 * Requires a server principal.
+		 */
+		servers: {
+			/**
+			 *  Can be any name. The value can be 'null' to remove the server from the session.
+			 */
+			[key: string]: {
+				constants: {
+					[key: string]: any;
+				};
+				properties: {
+					[key: string]: any;
+				};
+			} | null;
+		};
+	}
+
+	export interface MultiplayerActivityDetails {
+		id: string;
+		type: "activity";
+		version: 1;
+		sessionRef: MultiplayerSessionReference;
+		/**
+		 * 	The title ID that should be launched in order to join the activity.
+		 */
+		titleId: string;
+		/**
+		 * Xbox user ID of the member who owns the activity.
+		 */
+		ownerXuid: string;
+		/**
+		 * The handle ID corresponding to the activity.
+		 */
+		handleID: string;
+		/**
+		 * Only if ?include=relatedInfo
+		 */
+		relatedInfo?: {
+			/**
+			 * 	A Microsoft.Xbox.Services.Multiplayer.MultiplayerSessionVisibility value indicating the visibility state of the session.
+			 */
+			visibility: string | "open";
+			/**
+			 * A Microsoft.Xbox.Services.Multiplayer.MultiplayerSessionJoinRestriction value indicating the join restriction for the session. This restriction applies if the visiblity field is set to "open".
+			 */
+			joinRestriction: string | "followed";
+			/**
+			 * True if the session is temporarily closed for joining, and false otherwise.
+			 */
+			closed: boolean;
+			/**
+			 * Number of total slots.
+			 */
+			maxMembersCount: number;
+			/**
+			 * Number of slots occupied.
+			 */
+			membersCount: number;
+		};
+	}
+	/**
+	 * A Microsoft.Xbox.Services.Multiplayer.MultiplayerSessionReference object representing identifying information for the session.
+	 */
+	export interface MultiplayerSessionReference {
+		/**
+		 * Service configuration identifier (SCID). Part 1 of the session identifier.
+		 *  @type {GUID}
+		 */
+		scid: string;
+		/**
+		 * Name of the current instance of the session template. Part 2 of the session identifier.
+		 */
+		templateName: string;
+		/**
+		 * Name of the session. Part 3 of the session identifier.
+		 * The session name is optional in a POST; if not specified, MPSD fills in a GUID.
+		 */
+		name: string;
+	}
+
+	export interface InviteAttributes {
+		/**
+		 * The title being invited to, in decimal uint32. This value is used to find the title name and/or image.
+		 */
+		titleId: string;
+		/**
+		 * The title defined context token. Must be 256 characters or less when URI-encoded.
+		 */
+		context: string;
+		/**
+		 * The string name of a custom invite string to display in the invite notification.
+		 * */
+		contextString: string;
+		/**
+		 * The string name of the sender when the sender is a service.
+		 */
+		senderString: string;
+	}
+
+	export interface InviteHandleRequest {
+		id: string;
+		version: number | 1;
+		type: "invite";
+		sessionRef: MultiplayerSessionReference;
+		inviteAttributes: InviteAttributes;
+		invitedXuid: string;
+	}
+
+	export interface HandleRequest {
+		version: 1;
+		type: "activity";
+		sessionRef: MultiplayerSessionReference;
+	}
+
+	export interface MultiplayerSession {
+		properties: {
+			system: {
+				turn: [];
+				[key: string]: any;
+			};
+			custom: {
+				[key: string]: any;
+			};
+		};
+		constants: {
+			system: {
+				visibility: string;
+				[key: string]: any;
+			};
+			custom: { [key: string]: any };
+		};
+		servers: {};
+		members: {
+			first: number;
+			end: number;
+			count: number;
+			accepted: number;
+			[key: `${number}`]: {
+				next: 1;
+				pending: true;
+				properties: {
+					system: { [key: string]: any };
+					custom: { [key: string]: any };
+				};
+				constants: {
+					system: {
+						xuid: string;
+					};
+					custom: {
+						[key: string]: any;
+					};
+				};
+			};
+		};
+		key: string;
+	}
+
+	export interface SessionQueries {
+		/**
+		 * A keyword, for example, "foo", that must be found in sessions or templates if they are to be retrieved.
+		 */
+		keyword: string;
+		/**
+		 * The Xbox user ID, for example, "123", for sessions to include in the query. By default, the user must be active in the session for it to be included.
+		 */
+		xuid: string;
+		/**
+		 * 	True to include sessions for which the user is set as a reserved player but has not joined to become an active player. This parameter is only used when querying your own sessions, or when querying a specific user's sessions server-to-server.
+		 */
+		reservations: boolean;
+		/**
+		 *	True to include sessions that the user has accepted but is not actively playing. Sessions in which the user is "ready" but not "active" count as inactive.
+		 */
+		inactive: boolean;
+		/**
+		 * 	True to include private sessions. This parameter is only used when querying your own sessions, or when querying a specific user's sessions server-to-server.
+		 */
+		private: boolean;
+		/**
+		 * Visibility state for the sessions. Possible values are defined by the MultiplayerSessionVisibility. If this parameter is set to "open", the query should include only open sessions. If it is set to "private", the private parameter must be set to true.
+		 */
+		visibility: string;
+		/**
+		 * The maximum session version that should be included. For example, a value of 2 specifies that only sessions with a major session version of 2 or less should be included. The version number must be less than or equal to the request's contract version mod 100.
+		 */
+		version: number;
+		/**
+		 * The maximum number of sessions to retrieve. This number must be between 0 and 100.
+		 */
+		take: number;
+	}
 }
 
-interface People {
-	xuid: string;
-	addedDateTimeUtc: string;
-	isFavorite: boolean;
-	isKnown: boolean;
-	socialNetworks: string[];
-	isFollowedByCaller: boolean;
-	isFollowingCaller: boolean;
-	isUnfollowingFeed: boolean;
+class SessionDirectory {
+	private readonly xbox: XboxLive;
+	readonly uri: string = "https://sessiondirectory.xboxlive.com";
+	constructor(xboxLiveInstance: XboxLive) {
+		this.xbox = xboxLiveInstance;
+	}
+
+	setActivity(
+		sessionReference: SessionDirectoryTypes.MultiplayerSessionReference,
+		callback?: ResponseCallback
+	): ClientRequest {
+		return request(
+			`${this.uri}/handles`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+				body: {
+					version: 1,
+					type: "activity",
+					sessionRef: sessionReference,
+				},
+			},
+			callback
+		).end();
+	}
+
+	invite(
+		sessionReference: SessionDirectoryTypes.MultiplayerSessionReference,
+		inviteAttributes: SessionDirectoryTypes.InviteAttributes,
+		callback?: ResponseCallback
+	): ClientRequest {
+		return request(
+			`${this.uri}/handles`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+				body: {
+					version: 1,
+					type: "invite",
+					sessionRef: sessionReference,
+					inviteAttributes,
+				},
+			},
+			callback
+		).end();
+	}
+
+	/**
+	 * This method creates, joins, or updates a session, depending on what subset of the same JSON request body template is sent. On success, it returns a MultiplayerSession object containing the response returned from the server. The attributes in it might be different from the attributes in the passed-in MultiplayerSession object.
+	 * @param multiplayerSessionRequest
+	 * @param serviceConfigId
+	 * @param sessionTemplateName
+	 * @param sessionName
+	 * @param callback
+	 * @returns {ClientRequest}
+	 */
+	session(
+		multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest,
+		serviceConfigId: string,
+		sessionTemplateName: string,
+		sessionName: string,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+		return request(
+			`${this.uri}/serviceconfigs/${serviceConfigId}/sessionTemplates/${sessionTemplateName}/sessions/${sessionName}`,
+			{
+				method: "PUT",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+				body: multiplayerSessionRequest,
+			},
+			callback
+		).end();
+	}
+
+	getSession(
+		serviceConfigId: string,
+		queries: SessionDirectoryTypes.SessionQueries,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+
+		return request(
+			setQueries(
+				`${this.uri}/serviceconfigs/${serviceConfigId}/batch`,
+				queries
+			),
+			{
+				method: "GET",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
+
+	sessionKeepAlivePacket(
+		serviceConfigId: string,
+		sessionTemplateName: string,
+		sessionName: string,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+		return request(
+			`${this.uri}/serviceconfigs/${serviceConfigId}/sessionTemplates/${sessionTemplateName}/sessions/${sessionName}`,
+			{
+				method: "GET",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
+
+	removeMember(
+		serviceConfigId: string,
+		sessionTemplateName: string,
+		sessionName: string,
+		index: number,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+		return request(
+			`${this.uri}/serviceconfigs/${serviceConfigId}/sessionTemplates/${sessionTemplateName}/sessions/${sessionName}/members/${index}`,
+			{
+				method: "DELETE",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
+
+	getTemplates(
+		serviceConfigId: string,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+
+		return request(
+			`${this.uri}/serviceconfigs/${serviceConfigId}/sessiontemplates`,
+
+			{
+				method: "DELETE",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
+	//Return
+	removeServer(
+		serviceConfigId: string,
+		sessionTemplateName: string,
+		sessionName: string,
+		serverName: string,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+		return request(
+			`${this.uri}/serviceconfigs/${serviceConfigId}/sessionTemplates/${sessionTemplateName}/sessions/${sessionName}/servers/${serverName}`,
+			{
+				method: "DELETE",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
+
+	batchQuery(
+		serviceConfigId: string,
+
+		xuids: string[],
+		queries: SessionDirectoryTypes.SessionQueries,
+		callback?: ResponseCallback
+	): ClientRequest {
+		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
+
+		//console.log(createSessionContent);
+
+		//console.log(options);
+
+		return request(
+			setQueries(
+				`${this.uri}/serviceconfigs/${serviceConfigId}/batch`,
+				queries
+			),
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+				body: JSON.stringify({ xuids }),
+			},
+			callback
+		).end();
+	}
 }
 
-interface PeopleList {
-	totalCount: number;
-	people: People[];
+namespace PeopleHubTypes {
+	export interface Person {
+		xuid: string;
+		isFavorite: boolean;
+		isFollowingCaller: boolean;
+		isFollowedByCaller: boolean;
+		isIdentityShared: boolean;
+		addedDateTimeUtc: unknown;
+		displayName: string;
+		realName: string;
+		/**
+		 * URL for the image
+		 */
+		displayPicRaw: string;
+		showUserAsAvatar: string;
+		gamertag: string;
+		gamerScore: string;
+		modernGamertag: string;
+		modernGamertagSuffix: string;
+		uniqueModernGamertag: string;
+		xboxOneRep: string;
+		presenceState: string;
+		presenceText: string;
+		presenceDevices: unknown;
+		isBroadcasting: boolean;
+		isCloaked: unknown;
+		isQuarantined: boolean;
+		isXbox360Gamerpic: boolean;
+		lastSeenDateTimeUtc: string;
+		suggestion: unknown;
+		recommendation: unknown;
+		search: unknown;
+		titleHistory: unknown;
+		multiplayerSummary: unknown;
+		recentPlayer: unknown;
+		follower: {
+			text: string;
+			followedDateTime: string;
+		};
+		preferredColor: unknown;
+		presenceDetails: unknown;
+		titlePresence: unknown;
+		titleSummaries: unknown;
+		presenceTitleIds: unknown;
+		detail: unknown;
+		communityManagerTitles: unknown;
+		socialManager: unknown;
+		broadcast: unknown;
+		avatar: unknown;
+		linkedAccounts: {
+			networkName: string;
+			displayName: string;
+			showOnProfile: boolean;
+			isFamilyFriendly: boolean;
+			deeplink: unknown;
+		}[];
+		colorTheme: string;
+		preferredFlag: string;
+		preferredPlatforms: unknown[];
+	}
+	export interface PeopleList {
+		people: Person[];
+		recommendationSummary: unknown;
+		friendFinderState: unknown;
+		accountLinkDetails: unknown;
+	}
 }
 
-class XboxLive {
-	token: Token;
+class PeopleHub {
+	private readonly xbox: XboxLive;
+	readonly uri: string = "https://peoplehub.xboxlive.com";
+	constructor(xboxLiveInstance: XboxLive) {
+		this.xbox = xboxLiveInstance;
+	}
+	getFollowers(
+		callback?: (peopleList: string) => void,
+		xuid?: string
+	): ClientRequest {
+		return request(
+			`${this.uri}/users/${
+				xuid ? `xuid(${xuid})` : "me"
+			}/people/followers`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 5,
+					"Accept-Language": "en-us",
+				},
+			},
+			res => {
+				joinChunks(res, body => {
+					callback(body);
+				});
+			}
+		).end();
+	}
+}
 
+class RTAMultiplayerSession extends EventEmitter {
+	private readonly xbox: XboxLive;
+	readonly uri: string = "wss://rta.xboxlive.com";
+	readonly sessionName: string;
+	private firstConnectionId: boolean = true;
+	protected connectionId: string;
+	readonly sessionTemplateName: string;
+	protected websocketConnected: boolean = false;
+	readonly serviceConfigId: string;
+	protected startTimes: number = 0;
+	multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest;
+
+	functionsToRunOnSessionUpdate: (() => void)[] = [];
+
+	firstStartSignaled: boolean = false;
+	private readonly updateSessionCallback: (
+		rtaMultiplayerSession: RTAMultiplayerSession
+	) => void;
+	constructor(
+		xbox: XboxLive,
+		multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest,
+		serviceConfigId: string,
+		sessionTemplateName: string,
+		updateSessionCallback: (
+			rtaMultiplayerSession: RTAMultiplayerSession
+		) => void
+	) {
+		super();
+		this.updateSessionCallback = updateSessionCallback;
+		this.sessionName = crypto.randomUUID();
+		this.multiplayerSessionRequest = multiplayerSessionRequest;
+		this.serviceConfigId = serviceConfigId;
+		this.sessionTemplateName = sessionTemplateName;
+		this.xbox = xbox;
+
+		setInterval(() => {
+			if (this.websocketConnected && !this.xbox.isTokenRefreshing)
+				for (let i of this.functionsToRunOnSessionUpdate) {
+					i();
+				}
+		}, 28000);
+		this.functionsToRunOnSessionUpdate.push(() => {
+			this.join(this.xbox);
+			this.updateSession();
+		});
+		//console.log("Session started");
+		this.start();
+	}
+
+	private start() {
+		if (this.startTimes >= 5) {
+			fs.unlinkSync(
+				`${this.xbox.authPath}/${this.xbox.emailHash}_xbl-cache.json`
+			);
+			fs.unlinkSync(
+				`${this.xbox.authPath}/${this.xbox.emailHash}_live-cache.json`
+			);
+			this.xbox.refreshToken(() => {
+				this.start();
+			});
+			return void 0;
+		}
+
+		this.startTimes++;
+		const ws = new W3CWebSocket(
+			`${this.uri}/connect`,
+			"echo-protocol",
+			undefined,
+			{
+				Authorization: this.xbox.tokenHeader,
+			}
+		);
+		ws.onerror = (error: Error) => {
+			this.websocketConnected = false;
+			this.emit("error", error);
+			this.start();
+		};
+		ws.onopen = () => {
+			ws.send(
+				'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
+			);
+			this.websocketConnected = true;
+			this.emit("open");
+		};
+		ws.onclose = (event: ICloseEvent) => {
+			this.websocketConnected = false;
+			this.start();
+			this.emit("close", event);
+		};
+		ws.onmessage = (event: IMessageEvent) => {
+			switch (typeof event.data) {
+				case "string":
+					if (
+						this.firstConnectionId &&
+						event.data.includes("ConnectionId")
+					) {
+						this.connectionId = JSON.parse(
+							event.data
+						)[4].ConnectionId;
+						//@ts-ignore
+						this.firstConnectionId = false;
+						//debug("connectionId: " + this.connectionId);
+						this.updateSession();
+					}
+				default:
+					this.emit("message", event.data);
+			}
+		};
+	}
+	firstSession: boolean = true;
+	updateSession() {
+		//debug("updateSession called");
+		if (this.updateSessionCallback) this.updateSessionCallback(this);
+
+		let modRequest = this.multiplayerSessionRequest;
+
+		if (this.firstSession) {
+			//@ts-ignore
+			this.multiplayerSessionRequest.members = {
+				me: {
+					constants: {
+						system: {
+							initialize: true,
+							xuid: this.xbox.token.userXUID,
+						},
+					},
+					properties: {
+						system: {
+							active: true,
+							connection: this.connectionId,
+							subscription: {
+								changeTypes: ["everything"],
+								id: "9042513B-D0CF-48F6-AF40-AD83B3C9EED4",
+							},
+						},
+					},
+				},
+			};
+		}
+
+		this.xbox.sessionDirectory.session(
+			modRequest,
+			this.serviceConfigId,
+			this.sessionTemplateName,
+			this.sessionName,
+			res => {
+				res.on("data", data => {
+					//debug("updateSessionCallback called");
+					this.emit("sessionResponse", data.toString());
+					if (this.websocketConnected) {
+						this.xbox.sessionDirectory.setActivity(
+							{
+								scid: this.serviceConfigId,
+								templateName: this.sessionTemplateName,
+								name: this.sessionName,
+							},
+							res => {
+								res.on("data", data => {
+									this.emit("join", data.toString());
+								});
+							}
+						);
+					}
+				});
+			}
+		);
+	}
+
+	join(xbox: XboxLive) {
+		this.functionsToRunOnSessionUpdate.push(() => {
+			xbox.sessionDirectory.sessionKeepAlivePacket(
+				this.serviceConfigId,
+				this.sessionTemplateName,
+				this.sessionName
+			);
+		});
+
+		xbox.sessionDirectory.session(
+			{
+				//@ts-ignore
+				members: {
+					me: {
+						constants: {
+							system: {
+								initialize: true,
+								xuid: xbox.token.userXUID,
+							},
+						},
+						properties: {
+							system: {
+								active: true,
+								connection: this.connectionId,
+								subscription: {
+									changeTypes: ["everything"],
+									id: "9042513B-D0CF-48F6-AF40-AD83B3C9EED4",
+								},
+							},
+						},
+					},
+				},
+			},
+			this.serviceConfigId,
+			this.sessionTemplateName,
+			this.sessionName,
+			res => {
+				xbox.sessionDirectory.setActivity(
+					{
+						scid: this.serviceConfigId,
+						templateName: this.sessionTemplateName,
+						name: this.sessionName,
+					},
+					res => {
+						res.on("data", data => {
+							this.emit("join", data.toString());
+						});
+					}
+				);
+			}
+		);
+	}
+}
+interface MsaResponse {
+	userCode: string;
+	deviceCode: string;
+	verificationUri: string;
+	expiresIn: number;
+	interval: number;
+	message: string;
+}
+class XboxLive extends EventEmitter {
+	token: XboxLiveToken;
+	#isTokenRefreshing: boolean = true;
+
+	get isTokenRefreshing(): boolean {
+		return this.#isTokenRefreshing;
+	}
+	authPath: string;
+	liveCache: LiveCache;
+	email: string;
+	clientId: string;
+	emailHash: string;
+
+	readonly URIs = {
+		gamerPic: "https://gamerpics.xboxlive.com",
+		leaderBoard: "https://leaderboards.xboxlive.com",
+		list: "https://eplists.xboxlive.com",
+		entertainmentDiscovery: "https://eds.xboxlive.com",
+		marketplace: "https://marketplace.xboxlive.com",
+		matchmaking: "https://momatch.xboxlive.com",
+		multiplayerActivity: "https://multiplayeractivity.xboxlive.com",
+		presence: "https://userpresence.xboxlive.com",
+		privacy: "https://privacy.xboxlive.com",
+		profile: "https://profile.xboxlive.com",
+		titleStorage: "https://titlestorage.xboxlive.com",
+		clientStrings: "https://client-strings.xboxlive.com",
+		message: "https://msg.xboxlive.com",
+		userStats: "https://userstats.xboxlive.com",
+	};
 	get tokenHeader(): string {
+		if (process.env.FRIEND_CONNECT_DEBUG)
+			debugWrite(
+				`tokenHeader_${this.email}.txt`,
+				`XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`
+			);
 		return `XBL3.0 x=${this.token.userHash};${this.token.XSTSToken}`;
 	}
-	constructor(token: Token) {
-		this.token = token;
-	} //TODO: Add Error handling to each
+	readonly authOptions: authPkg.MicrosoftAuthFlowOptions;
+	private password;
+	readonly social: Social;
+	readonly sessionDirectory: SessionDirectory;
+	readonly achievements: Achievements;
+	protected firstTokenAcquired: boolean;
+	readonly peopleHub: PeopleHub;
 
-	addFriend(xuid: string) {
-		https
-			.request(
-				Constants.PEOPLE + `/xuid(${xuid})`,
-				{
-					method: "PUT",
-					headers: {
-						Authorization: this.tokenHeader,
-					},
-				},
-				(res) => {
-					//console.log(res.statusCode, res.statusMessage);
-					res.on("error", (err) => {
-						console.log("Add Friend:\n", err);
-					});
-				}
-			)
-			.end();
-	}
-	removeFriend(xuid: string) {
-		//TODO: fix this
-		https
-			.request(
-				Constants.PEOPLE + `/xuid(${xuid})`,
-				{
-					method: "DELETE",
-					headers: {
-						Authorization: this.tokenHeader,
-					},
-				},
-				(res) => {
-					res.on("error", (err) => {
-						console.log("Remove Friend:\n", err);
-					});
-				}
-			)
-			.end();
+	constructor(
+		email: string,
+		tokenPath: string,
+		options?: authPkg.MicrosoftAuthFlowOptions,
+		codeCallback?: (res: {
+			userCode: string;
+			deviceCode: string;
+			verificationUri: string;
+			expiresIn: number;
+			interval: number;
+			message: string;
+		}) => void
+	) {
+		super();
+		this.email = email;
+		this.authOptions = options || {};
+		this.emailHash = createHash(email);
+		this.social = new Social(this);
+		this.authPath = tokenPath || "./auth";
+		this.sessionDirectory = new SessionDirectory(this);
+		this.achievements = new Achievements(this);
+		this.peopleHub = new PeopleHub(this);
+		this.clientId = options.authTitle || "00000000441cc96b";
+		this.on("msaAuthCodePrompt", (msa: MsaResponse) => {
+			if (codeCallback) codeCallback(msa);
+			console.log(
+				msa.message,
+				"\nPlease login with this email:",
+				this.email
+			);
+		});
+		this.refreshToken();
 	}
 
-	async getProfile(xuid: string) {
-		https
-			.request(
-				Constants.PEOPLE + `/xuid(${xuid})`,
-				{
-					method: "GET",
-					headers: {
-						Authorization: this.tokenHeader,
-					},
-				},
-				(res) => {
-					//console.log(res.statusCode, res.statusMessage);
-					res.on("error", (err) => {
-						console.log("Get Profile:\n", err);
-					});
-				}
-			)
-			.end();
+	resetTokens(): void {
+		fs.unlinkSync(`${this.authPath}/${this.emailHash}_xbl-cache.json`);
+		fs.unlinkSync(`${this.authPath}/${this.emailHash}_live-cache.json`);
 	}
+	refreshToken(callback?: (token: XboxLiveToken) => void) {
+		this.#isTokenRefreshing = true;
+		if (!fs.existsSync(this.authPath))
+			fs.mkdirSync(this.authPath, { recursive: true });
+		let liveCache: LiveCache;
+		try {
+			liveCache = JSON.parse(
+				fs.readFileSync(
+					`${this.authPath}/${this.emailHash}_live-cache.json`,
+					"utf8"
+				)
+			);
+		} catch {
+			return this.getToken(callback);
+		}
+		if (!liveCache.token) {
+			if (this.liveCache) {
+				liveCache = this.liveCache;
+			} else return this.getToken();
+		}
+
+		const req = uniRest("POST", Constants.LIVE_TOKEN_REQUEST);
+		req.headers({
+			"Content-Type": "application/x-www-form-urlencoded",
+		});
+		req.form({
+			scope: liveCache.token.scope,
+			client_id: this.clientId,
+			grant_type: "refresh_token",
+			refresh_token: liveCache.token.refresh_token,
+		});
+		req.end(res => {
+			this.liveCache = {
+				token: { ...res.body, obtainedOn: Date.now() },
+			};
+			//console.log(this.liveCache);
+			fs.writeFileSync(
+				`${this.authPath}/${this.emailHash}_live-cache.json`,
+				JSON.stringify(this.liveCache),
+				"utf8"
+			);
+
+			if (
+				fs.existsSync(
+					`${this.authPath}/${this.emailHash}_xbl-cache.json`
+				)
+			)
+				fs.unlinkSync(
+					`${this.authPath}/${this.emailHash}_xbl-cache.json`
+				);
+
+			this.getToken(callback);
+		});
+	}
+
+	private setRefreshInterval() {
+		let expiry = this.liveCache.token.expires_in * 1000;
+		expiry += this.liveCache.token.obtainedOn;
+		setInterval(() => {
+			if (expiry - Date.now() - 3600000 < 0) this.refreshToken();
+		}, 900000);
+	}
+
+	getToken(callback?: (token: XboxLiveToken) => void) {
+		//debug(this.email, this.authPath, this.authOptions);
+
+		new Authflow(
+			this.email,
+			this.authPath,
+			this.authOptions,
+			(res: MsaResponse) => {
+				//debug(`getToken msa code`);
+				this.emit("msaAuthCodePrompt", res);
+			}
+		)
+			.getXboxToken()
+			.then((token: XboxLiveToken) => {
+				this.token = token;
+				this.liveCache = JSON.parse(
+					fs.readFileSync(
+						`${this.authPath}/${this.emailHash}_live-cache.json`,
+						"utf8"
+					)
+				);
+				this.#isTokenRefreshing = false;
+				if (callback) callback(token);
+				if (!this.firstTokenAcquired) {
+					this.setRefreshInterval();
+					this.emit("firstTokenAcquired");
+				}
+				this.firstTokenAcquired = true;
+				this.emit("token", token);
+			});
+	}
+}
+
+interface LiveCache {
+	token: {
+		token_type: string;
+		expires_in: number;
+		scope: string;
+		access_token: string;
+		refresh_token: string;
+		user_id: string;
+		obtainedOn: number;
+	};
 }
 
 //console.log(new XboxLive(token).tokenHeader);
 
+interface AccountInfo {
+	email: string;
+	password?: string;
+}
+
+interface SessionOptionsConstants {
+	rakNetGUID: boolean;
+	protocol: boolean;
+	version: boolean;
+	worldName: boolean;
+	hostName: boolean;
+	gamemode: boolean;
+	maxConnectedPlayers: boolean;
+	connectedPlayers: boolean;
+}
+
+interface AdditionalSessionOptions {
+	autoFriending: boolean;
+	log: boolean;
+	constants: SessionOptionsConstants;
+
+	transferServer: {
+		ip: string;
+		port: number;
+		version: `${number}.${number}.${number}` | `${number}.${number}`;
+	};
+}
+
+interface FriendConnectSessionInfoOptions {
+	/**
+	 * The name of the server, this can be up to 35 characters long but I would stay to a maximum of 26-27
+	 */
+	hostName: string;
+	/**
+	 * The subheader of the server name, use this as the motd (message of the day). I would stay at a maximum of 24 ish characters long
+	 */
+	worldName: string;
+	/**
+	 * A string that can be any value that is in the place of the version
+	 */
+	version: string;
+	/**
+	 * The path to the directory that the authentication tokens are stored.
+	 */
+	tokenPath: string;
+	/**
+	 * The protocol number that corresponds which versions of the game can join
+	 */
+
+	joinability: "joinable_by_friends";
+
+	protocol: number;
+	connectedPlayers: number;
+	maxConnectedPlayers: number;
+	ip: string;
+	port: number;
+	log?: boolean;
+	connectionType: number;
+	autoFriending: boolean;
+	constants: SessionOptionsConstants;
+	accounts: string[];
+}
+interface MinecraftLobbyCustomProperties {
+	BroadcastSetting: number;
+	CrossPlayDisabled: boolean;
+	Joinability: string | "joinable_by_friends";
+	LanGame: boolean;
+	MaxMemberCount: number;
+	MemberCount: number;
+	OnlineCrossPlatformGame: boolean;
+	SupportedConnections: {
+		ConnectionType: number;
+		HostIpAddress: string;
+		HostPort: number;
+		RakNetGUID: string;
+	}[];
+	TitleId: number;
+	TransportLayer: number;
+	levelId: string;
+	hostName: string;
+	ownerId: string;
+	rakNetGUID: string;
+	worldName: string;
+	worldType: string;
+	protocol: number;
+	version: string;
+}
 //TODO updating player number and motd
 
 class Session extends events.EventEmitter {
-	SessionInfo: SessionInfo;
-	sessionStarted: boolean = false;
-	xblInstance: XboxLive;
-	log: boolean = false;
+	protected xboxAccounts: XboxLive[] = [];
+	hostAccount: XboxLive;
+	protected sessionInstance: RTAMultiplayerSession;
+	public minecraftLobbyCustomOptions: MinecraftLobbyCustomProperties;
+	protected followerXuids: Record<string, string[]> = {};
+	public additionalOptions: AdditionalSessionOptions =
+		{} as AdditionalSessionOptions;
 
-	stopped = false;
-	profileName: any;
+	accountXuids: string[] = [];
 
-	refreshTime: number;
-
-	constructor(options: SessionInfoOptions) {
+	accountsInitialized: number = 0;
+	accountsWithNoAchievements: number = 0;
+	constructor(options: FriendConnectSessionInfoOptions) {
 		super();
 
-		if (!options.email) throw new Error("Email is required");
+		if (!options.accounts)
+			throw new Error("`accounts` is required in Session()");
 
 		if (!options.connectionType)
-			throw new Error("Connection Type is required");
+			throw new Error("`connectionType` is required in Session()");
 
-		if (!options.ip) throw new Error("IP is required");
+		if (!options.ip) throw new Error("`ip` is required in Session()");
 
-		if (!options.port) throw new Error("Port is required");
+		if (!options.port) throw new Error("`port` is required in Session()");
 
-		if (!options.tokenPath) throw new Error("Token Path is required");
+		if (!options.tokenPath) options.tokenPath = "./auth/";
 
-		if (!options.hostName)
-			options.hostName = "Edit, Hostname to change this";
+		if (!options.hostName) options.hostName = "";
 
-		if (!options.worldName)
-			options.worldName = "Edit, World Name to change this";
+		if (!options.worldName) options.worldName = "";
 
-		if (options.log) this.log = true;
+		if (options.log) this.additionalOptions.log = true;
 
-		this.refreshXblToken(options.email, options.tokenPath);
+		options.joinability = options.joinability || "joinable_by_friends";
 
-		this.on("tokenRefreshed", () => {
-			console.log("[FriendConnect] Connecting to RTA Websocket");
-			this.SessionInfo = this.createSessionInfo(options);
-			var ws = new W3CWebSocket(
-				"wss://rta.xboxlive.com/connect",
-				"echo-protocol",
-				undefined,
-				{
-					Authorization: this.xblInstance.tokenHeader,
+		if (options.autoFriending) this.additionalOptions.autoFriending = true;
+		this.additionalOptions.constants =
+			options.constants || ({} as SessionOptionsConstants);
+
+		if (!/.[\/]?[a-zA-Z0-9]+[\/]?/.test(options.tokenPath))
+			throw new Error("`tokenPath` is invalid, use ./auth/ for example");
+
+		this.initializeAccounts(options.accounts, options.tokenPath);
+
+		this.on("accountInitialized", () => {
+			if (this.accountsInitialized >= options.accounts.length)
+				this.checkAchievements(this.xboxAccounts);
+		});
+		this.on("achievementChecked", () => {
+			if (this.accountsWithNoAchievements >= options.accounts.length)
+				this.emit("accountsDoNotHaveAchievements");
+			//debug(this.accountsWithNoAchievements);
+		});
+		this.on("accountsDoNotHaveAchievements", () => {
+			for (let i of this.xboxAccounts) {
+				this.accountXuids.push(i.token.userXUID);
+			}
+			if (this.additionalOptions.autoFriending)
+				this.setFriendInterval(this.xboxAccounts);
+
+			for (const i of this.xboxAccounts) {
+				for (let j of this.xboxAccounts) {
+					debug(i.email, j.email);
+					if (i != j)
+						i.social.addFriend(j.token.userXUID, res => {
+							debug(res.statusCode);
+							res.on("data", data => {
+								debug(data);
+							});
+						});
 				}
-			);
+			}
+			this.hostAccount = this.xboxAccounts.shift();
 
-			let liveCache = JSON.parse(
-				fs.readFileSync(
-					options.tokenPath +
-						"/" +
-						fs.readdirSync(options.tokenPath)[0],
-					"utf8"
-				)
-			);
-			this.refreshTime =
-				liveCache.token.expires_in * 1000 + liveCache.obtainedOn;
-
-			ws.onerror = (error) => {
-				console.error("[FriendConnect] RTA Websocket Connection Error");
-				console.error("Error Name: ", error.name);
-				console.error("Error Message: ", error.message);
-				console.error("Error Stack: ", error.stack);
-				this.messageLogger(error, undefined, "RTA Websocket");
-				//this.stopped = true;
-
-				new Session(options);
-			};
-
-			ws.onopen = () => {
-				ws.send(
-					'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
-				);
-				if (this.log)
+			const log = (...message: any[]) => {
+				if (this.additionalOptions.log)
 					console.log(
-						"[FriendConnect] WebSocket Client Connected to RTA"
+						`[FriendConnect ${this.hostAccount.email}]`,
+						...message,
+						"\n"
 					);
 			};
-			ws.onclose = (event) => {
-				if (this.log) {
-					console.log("[FriendConnect] WebSocket Client Closed");
-					console.log("Code: " + event.code);
-					console.log("Reason: " + event.reason);
-					console.log("Clean Exit: " + event.wasClean);
-				}
+			log("Starting...");
 
-				if (this.log) console.log("[FriendConnect] Restarting...");
-				//this.stopped = true;
-
-				new Session(options);
-			};
-
-			ws.onmessage = (event) => {
-				//if (this.log) console.log(event.data);
-				switch (typeof event.data) {
-					case "string":
-						const data = JSON.parse(event.data);
-
-						if (event.data.includes("ConnectionId")) {
-							this.SessionInfo.connectionId =
-								data[4].ConnectionId;
-							this.emit("connectionId");
-						} else if (this.log) {
-							try {
-								console.log(
-									"----------------------------------- Start of RTA Websocket Message\n",
-									JSON.parse(event.data.toString()),
-									"\n----------------------------------- End of RTA Websocket Message"
-								);
-							} catch {
-								console.log(
-									"----------------------------------- Start of RTA Websocket Message\n",
-									event.data.toString(),
-									"\n----------------------------------- End of RTA Websocket Message"
-								);
-							}
-						}
-				}
-			};
-
-			this.on("connectionId", () => {
-				//console.log(this.SessionInfo.connectionId);
-				this.updateSession();
-			});
-			this.on("sessionUpdated", () => {
-				if (!this.sessionStarted) {
-					var createHandleRequestOptions = {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: this.xblInstance.tokenHeader,
-							"x-xbl-contract-version": 107,
-						},
-					};
-
-					var createHandleContent = this.createHandleRequest(
-						1,
-						"activity",
-						{
-							scid: Constants.SERVICE_CONFIG_ID,
-							templateName: "MinecraftLobby",
-							name: this.SessionInfo.sessionId,
-						}
-					);
-
-					var createHandleRequest = https.request(
-						Constants.HANDLE,
-						createHandleRequestOptions,
-						(res) => {
-							//console.log("statusCode:", res.statusCode);
-							//console.log("headers:", res.headers);
-							res.on("data", (data) => {
-								if (this.log)
-									console.log(
-										"----------------------------------- Start of Handle Request\n",
-										JSON.parse(data.toString()),
-										"\n----------------------------------- End of Handle Request"
-									);
-							});
-						}
-					);
-
-					createHandleRequest.write(
-						JSON.stringify(createHandleContent)
-					);
-
-					createHandleRequest.on("error", (error) => {
-						this.messageLogger(
-							error,
-							undefined,
-							"createHandleRequest"
-						);
-					});
-					createHandleRequest.end();
-					this.sessionStarted = true;
-					this.emit("sessionStarted");
-				}
-			});
-
-			this.on("sessionStarted", () => {
-				if (this.log) console.log("[FriendConnect] Session started");
-
-				setInterval(() => {
-					if (!this.stopped) this.updateSession(this.SessionInfo);
-				}, 30000);
-
-				setInterval(() => {
-					if (Date.now() + 85000000 >= this.refreshTime) {
-						this.refreshXblToken(options.email, options.tokenPath);
+			//debug("accountsDoNotHaveAchievements");
+			this.minecraftLobbyCustomOptions =
+				this.createMinecraftLobbyCustomProperties(
+					this.hostAccount,
+					options
+				);
+			setInterval(() => {
+				this.getAdvertisement();
+			}, 15000);
+			this.createSessionRequest().then(request => {
+				//debug(request);
+				this.sessionInstance = new RTAMultiplayerSession(
+					this.hostAccount,
+					//@ts-ignore
+					request,
+					Constants.SERVICE_CONFIG_ID,
+					"MinecraftLobby",
+					session => {
+						session.multiplayerSessionRequest.properties.custom =
+							this.minecraftLobbyCustomOptions;
 					}
-				}, 5000000);
+				);
 
-				if (options.autoFriending)
-					setInterval(() => {
-						if (!this.stopped) {
-							if (this.log)
-								console.log(
-									"[FriendConnect] AutoFriend Interval"
-								);
-							let request = https.request(
-								Constants.PEOPLE_HUB + "/followers",
-								{
-									method: "GET",
-									headers: {
-										Authorization:
-											this.xblInstance.tokenHeader,
-										"x-xbl-contract-version": 5,
-										"Accept-Language": "en-us",
-									},
-								},
-								(res) => {
-									//console.log(res.statusCode, res.statusMessage);
-									var body = "";
-									res.on("data", function (chunk) {
-										body += chunk;
-									});
+				this.sessionInstance.on("message", (event: IMessageEvent) => {
+					log(event);
+				});
 
-									res.on("end", () => {
-										try {
-											let data: PeopleList =
-												JSON.parse(body);
-											if (this.log)
-												console.log(
-													`[FriendConnect] ${data.people.length} profile(s) have the host profile friended.` //followed ${this.profileName}
-												);
-											for (let i of data.people) {
-												if (i.isFollowingCaller) {
-													if (!i.isFollowedByCaller)
-														this.xblInstance.addFriend(
-															i.xuid
-														);
-												} else {
-													this.xblInstance.removeFriend(
-														i.xuid
-													);
-												}
-											}
-										} catch (error) {
-											console.error(
-												"[FriendConnect] AutoFriend Interval Error"
-											);
-											console.error(
-												"Error Name: ",
-												error.name
-											);
-											console.error(
-												"Error Message: ",
-												error.message
-											);
-											console.error(
-												"Error Stack: ",
-												error.stack
-											);
-											this.messageLogger(
-												error,
-												undefined,
-												"AutoFriend Interval"
-											);
-										}
-									});
+				this.sessionInstance.on("open", () => {
+					log("Connected to RTA Websocket");
+				});
+				this.sessionInstance.on("close", (event: ICloseEvent) => {
+					log(event.code);
+					log(event.reason);
+					log(event.wasClean);
+					log("Restarting");
+				});
+				this.sessionInstance.on("error", (error: Error) => {
+					this.errorHandling(
+						error,
+						this.hostAccount.email,
+						"RTA Websocket"
+					);
+					log("Restarting...");
+				});
 
-									res.on("error", (error) => {
-										console.error(
-											"[FriendConnect] AutoFriend Interval Error"
-										);
-										console.error(
-											"Error Name: ",
-											error.name
-										);
-										console.error(
-											"Error Message: ",
-											error.message
-										);
-										console.error(
-											"Error Stack: ",
-											error.stack
-										);
-										this.messageLogger(
-											error,
-											undefined,
-											"AutoFriend Interval"
-										);
-									});
-								}
-							);
-							request.on("error", (error) => {
-								console.error(
-									"[FriendConnect] AutoFriend Interval Error"
-								);
-								console.error("Error Name: ", error.name);
-								console.error("Error Message: ", error.message);
-								console.error("Error Stack: ", error.stack);
-								this.messageLogger(
-									error,
-									undefined,
-									"AutoFriend Interval"
-								);
-							});
-							request.end();
+				let firstResponse = true;
+				this.sessionInstance.on("sessionResponse", session => {
+					if (firstResponse) {
+						for (let i of this.xboxAccounts) {
+							this.sessionInstance.join(i);
+							firstResponse = false;
 						}
-					}, 10000);
+					}
+					session = JSON.parse(session);
+
+					if (Object.keys(session.members).length > 35) {
+						for (let i in session.members) {
+							let member = session.members[i];
+							console.log(session.members[i]);
+							if (
+								this.accountXuids.includes(
+									session.members[i].constants.system.xuid
+								)
+							)
+								continue;
+
+							if (
+								Date.now() +
+									300000 -
+									Date.parse(member.joinTime) <
+								0
+							)
+								this.hostAccount.sessionDirectory.removeMember(
+									this.sessionInstance.serviceConfigId,
+									this.sessionInstance.sessionTemplateName,
+									this.sessionInstance.sessionName,
+									parseInt(i)
+								);
+						}
+					}
+				});
 			});
 		});
 	}
 
-	async refreshXblToken(email: string, tokenPath: fs.PathLike) {
-		try {
-			let authDir = fs.readdirSync(tokenPath);
+	initializeAccounts(accounts, tokenPath: string): void {
+		this.accountsInitialized = 0;
 
-			if (authDir.length > 2) {
-				throw new Error(
-					"You may only have one account in your auth directory."
-				);
-			}
-			let liveCache = JSON.parse(
-				fs.readFileSync(`${tokenPath}${authDir[0]}`, "utf8")
+		for (let i = 0; i < accounts.length; i++) {
+			let account = accounts[i];
+			//debug("Accounts initialized: " + this.accountsInitialized);
+			let xbox = new XboxLive(
+				account,
+
+				tokenPath,
+				{
+					authTitle: Titles.MinecraftNintendoSwitch,
+					deviceType: "Nintendo",
+				}
 			);
-
-			const req = uniRest("POST", Constants.LIVE_TOKEN_REQUEST);
-
-			req.headers({
-				"Content-Type": "application/x-www-form-urlencoded",
-			});
-
-			req.form({
-				scope: liveCache.token.scope,
-				client_id: Constants.AUTH_TITLE,
-				grant_type: "refresh_token",
-				refresh_token: liveCache.token.refresh_token,
-			});
-			req.end((res) => {
-				fs.writeFileSync(
-					`${tokenPath}${authDir[0]}`,
-					JSON.stringify({ token: res.body }),
-					"utf8"
+			if (this.additionalOptions.log)
+				console.log(
+					`[FriendConnect ${xbox.email}] Initializing Account`
 				);
-				try {
-					fs.unlinkSync(`${tokenPath}${authDir[1]}`);
-				} catch {}
-
-				this.getXblTokenAndCheckAchievements(email, tokenPath);
+			xbox.on("firstTokenAcquired", () => {
+				this.xboxAccounts.push(xbox);
+				this.accountsInitialized++;
+				if (this.additionalOptions.log)
+					console.log(
+						`[FriendConnect ${xbox.email}] Account Initialized`
+					);
+				this.emit("accountInitialized");
 			});
-		} catch {
-			this.getXblTokenAndCheckAchievements(email, tokenPath);
 		}
 	}
-
-	async getXblTokenAndCheckAchievements(
-		email: string,
-		tokenPath: fs.PathLike
-	) {
-		if (this.log) console.log("[FriendConnect] Getting XboxLive Token");
-		//@ts-ignore
-		new Authflow(email, tokenPath, {
-			authTitle: Titles.MinecraftNintendoSwitch,
-			deviceType: "Nintendo",
-		})
-			.getXboxToken()
-			.then((token) => {
-				let achievementXblInstance = new XboxLive(token);
-
-				const req = https.request(
-					`https://achievements.xboxlive.com/users/xuid(${achievementXblInstance.token.userXUID})/achievements`,
-					{
-						method: "GET",
-						headers: {
-							Authorization: achievementXblInstance.tokenHeader,
-							"x-xbl-contract-version": "5",
-							"Content-Length": "7",
-						},
-					},
-					(res) => {
-						const chunks = [];
-
-						res.on("data", function (chunk) {
-							chunks.push(chunk);
-						});
-
-						res.on("end", () => {
-							if (this.log)
-								console.log(
-									"[FriendConnect] Checking for Achievements"
-								);
-							const body = Buffer.concat(chunks).toString();
-							const data = JSON.parse(body);
-							debug(data);
-							if (data.achievements.length === 0) {
-								this.xblInstance = achievementXblInstance;
-								if (!this.sessionStarted) {
-									this.emit("tokenRefreshed", token);
-								}
-							} else {
-								throw new Error(
-									"This account has achievements, please use an alt account without achievements to protect your account."
-								);
-							}
-						});
-					}
+	checkAchievements(accounts: XboxLive[]): void {
+		for (let xbox of accounts) {
+			if (this.additionalOptions.log)
+				console.log(
+					`[FriendConnect ${xbox.email}] Checking for Achievements`
 				);
-				req.end();
-				req.on("error", (err) => {
-					debug(err);
-				});
-			});
-	}
 
-	createSessionInfo(options: SessionInfoOptions): SessionInfo {
-		if (this.log) console.log("[FriendConnect] Creating Session Info");
+			try {
+				xbox.achievements.get(achievements => {
+					if (achievements.length === 0) {
+						if (this.additionalOptions.log)
+							console.log(
+								`[FriendConnect ${xbox.email}] Passed Achievement Check`
+							);
+						this.accountsWithNoAchievements++;
+						this.emit("achievementChecked");
+					} else {
+						throw new Error(
+							`This account "${xbox.email}" has achievements, please use an alt account without achievements to protect your account.`
+						);
+					}
+				});
+			} catch (error) {
+				this.errorHandling(
+					error,
+					xbox.email,
+					"Checking for Achievements"
+				);
+			}
+		}
+	}
+	ip;
+	port;
+	createMinecraftLobbyCustomProperties(
+		xbox: XboxLive,
+		options: FriendConnectSessionInfoOptions
+	): MinecraftLobbyCustomProperties {
+		this.ip = options.ip;
+		this.port = options.port;
+
+		if (this.additionalOptions.log)
+			console.log(`[FriendConnect ${xbox.email}] Creating Session Info`);
 		return {
+			BroadcastSetting: 3,
+			CrossPlayDisabled: false,
+			Joinability: options.joinability,
+			LanGame: true,
+			MaxMemberCount: options.maxConnectedPlayers,
+			MemberCount: options.connectedPlayers,
+			OnlineCrossPlatformGame: true,
+			SupportedConnections: [
+				{
+					ConnectionType: options.connectionType,
+					HostIpAddress: options.ip,
+					HostPort: options.port,
+					RakNetGUID: "",
+				},
+			],
+			TitleId: 0,
 			hostName: options.hostName,
-			worldName: options.worldName,
-			version: options.version,
-			protocol: options.protocol,
-			players: options.players,
-			maxPlayers: options.maxPlayers,
-			ip: options.ip,
-			port: options.port,
+			ownerId: xbox.token.userXUID,
 			rakNetGUID: "",
-			sessionId: crypto.randomUUID(),
-			xuid: this.xblInstance.token.userXUID,
-			connectionId: "",
-			connectionType: options.connectionType,
-			keepVersionAndProtocolConstant:
-				options.keepVersionAndProtocolConstant,
-			autoFriending: options.autoFriending,
-			log: this.log,
+			worldName: options.worldName,
+			worldType: "Survival",
+			protocol: options.protocol,
+			version: options.version,
+			levelId: "level",
+			TransportLayer: 0,
 		};
 	}
 
-	messageLogger(
-		error: Error,
-		wsClose: wsPkg.ICloseEvent,
-		source: string
-	): void {
-		if (this.log) {
-			if (!fs.existsSync("./error.log")) {
+	setFriendInterval(accounts: XboxLive[]) {
+		for (let xbox of accounts) {
+			this.followerXuids[xbox.email] = [];
+
+			setInterval(() => {
+				if (!xbox.isTokenRefreshing) {
+					if (this.additionalOptions.log)
+						console.log(
+							`[FriendConnect ${xbox.email}] AutoFriend Interval`
+						);
+					let req = request(
+						"https://peoplehub.xboxlive.com/users/me/people/followers",
+						{
+							method: "GET",
+							headers: {
+								Authorization: xbox.tokenHeader,
+								"x-xbl-contract-version": 5,
+								"Accept-Language": "en-us",
+							},
+						},
+						res => {
+							//console.log(res.statusCode, res.statusMessage);
+							var body = "";
+							res.on("data", chunk => {
+								body += chunk;
+							});
+
+							res.on("end", () => {
+								try {
+									let data: PeopleHubTypes.PeopleList =
+										JSON.parse(body);
+									if (this.additionalOptions.log)
+										console.log(
+											`[FriendConnect ${xbox.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
+										);
+
+									for (let person of data.people) {
+										let isNotFriendedOnAnAccount = true;
+										/*for (let email in this.followerXuids) {
+											if (
+												!this.followerXuids[
+													email
+												].includes(person.xuid)
+											) {
+												this.followerXuids[email].push(
+													person.xuid
+												);
+												isNotFriendedOnAnAccount =
+													false;
+											}
+										}*/
+
+										if (person.isFollowingCaller) {
+											if (!person.isFollowedByCaller) {
+												xbox.social.addFriend(
+													person.xuid
+												);
+												if (this.additionalOptions.log)
+													console.log(
+														`[FriendConnect ${xbox.email}] Added Friend ${person.gamertag}`
+													);
+												this.emit(
+													"friendAdded",
+													person
+												);
+											}
+										} else {
+											if (
+												!this.accountXuids.includes(
+													person.xuid
+												)
+											)
+												xbox.social.removeFriend(
+													person.xuid
+												);
+
+											if (this.additionalOptions.log)
+												console.log(
+													`[FriendConnect ${xbox.email}] Removed Friend ${person.gamertag}`
+												);
+
+											this.emit("friendRemoved", person);
+										}
+									}
+								} catch (error) {
+									this.errorHandling(
+										error,
+										xbox.email,
+										"AutoFriend Interval"
+									);
+								}
+							});
+
+							res.on("error", error => {
+								this.errorHandling(
+									error,
+									xbox.email,
+									"AutoFriend Interval"
+								);
+							});
+						}
+					);
+					req.on("error", error => {
+						this.errorHandling(
+							error,
+							xbox.email,
+							"AutoFriend Interval"
+						);
+					});
+					req.end();
+				}
+			}, 15000);
+		}
+	}
+	async getAdvertisement(): Promise<void> {
+		try {
+			ping({
+				host: this.ip,
+				port: parseInt(this.port),
+			}).then(info => {
+				if (!this.additionalOptions.constants.gamemode)
+					this.minecraftLobbyCustomOptions.worldType = info.gamemode;
+				if (!this.additionalOptions.constants.worldName)
+					//@ts-ignore
+					this.minecraftLobbyCustomOptions.worldName = info.levelName;
+				if (!this.additionalOptions.constants.hostName)
+					this.minecraftLobbyCustomOptions.hostName = info.motd;
+				if (!this.additionalOptions.constants.protocol)
+					this.minecraftLobbyCustomOptions.protocol = info.protocol;
+				if (!this.additionalOptions.constants.version)
+					this.minecraftLobbyCustomOptions.version = info.version;
+				if (!this.additionalOptions.constants.rakNetGUID)
+					this.minecraftLobbyCustomOptions.SupportedConnections[0].RakNetGUID =
+						info.serverId;
+				if (!this.additionalOptions.constants.connectedPlayers)
+					this.minecraftLobbyCustomOptions.MemberCount =
+						//@ts-ignore
+						parseInt(info.playersOnline);
+				if (!this.additionalOptions.constants.maxConnectedPlayers)
+					this.minecraftLobbyCustomOptions.MaxMemberCount =
+						//@ts-ignore
+						parseInt(info.playersMax);
+			});
+		} catch (e) {
+			this.errorHandling(e, "", "Server Advertisement");
+		}
+	}
+
+	async createSessionRequest() {
+		if (this.additionalOptions.log)
+			console.log("[FriendConnect] Creating Session Request");
+		await this.getAdvertisement();
+		return {
+			properties: {
+				system: {
+					joinRestriction: "followed",
+					readRestriction: "followed",
+					closed: false,
+				},
+				custom: this.minecraftLobbyCustomOptions,
+			},
+		};
+	}
+	errorHandling(error: Error, email: string, source: string) {
+		if (this.additionalOptions.log) {
+			console.error(
+				`[FriendConnect ${email}] ${source} Error`,
+				"\nError Name: ",
+				error.name,
+				"\nError Message: ",
+				error.message,
+				"\nError Stack: ",
+				error.stack
+			);
+
+			if (!fs.existsSync("./friend-connect.log")) {
 				fs.writeFileSync(
 					"./friend-connect.log",
 					"If restarting does not fix your error, submit this file in an github issue. https://github.com/minerj101/FriendConnect.\n-------------------------------------------------------\n",
@@ -676,224 +1902,17 @@ class Session extends events.EventEmitter {
 			}
 
 			let message: string;
-			if (wsClose)
-				message = `\n[${Date.toString()}] Websocket Close:\n
-		Code: ${wsClose.code}\n
-		Reason: ${wsClose.reason}\n
-		WasClean: ${wsClose.wasClean}\n
-		\n---------------------------------`;
 
-			if (error)
-				message = `\n[${Date.toString()}] ${source} Error:\n
+			message = `\n[${Date.now()}] ${source} Error:\n
 		Name: ${error.name}\n
 		Message: ${error.message}\n
 		Stack: ${error.stack}\n
+		Error: ${error}\n
 		\n---------------------------------`;
 
-			fs.appendFileSync("./friend-connect.log", message, "utf8");
+			fs.appendFileSync("./friend-connect-error.log", message, "utf8");
 		}
-	}
-
-	updateSessionInfo(options: SessionInfo) {
-		for (const key in options) {
-			this.SessionInfo[key] = options[key];
-		}
-	}
-
-	async getAdvertisement(): Promise<ServerAdvertisement> {
-		let info;
-		try {
-			info = await ping({
-				host: this.SessionInfo.ip,
-				port: this.SessionInfo.port,
-			});
-		} catch (e) {
-			info = {
-				motd: this.SessionInfo.worldName,
-				name: this.SessionInfo.hostName,
-				protocol: this.SessionInfo.protocol,
-				version: this.SessionInfo.version,
-				playersOnline: this.SessionInfo.players,
-				playersMax: this.SessionInfo.maxPlayers,
-				gamemode: "survival",
-				serverId: "",
-			};
-		}
-
-		if (this.SessionInfo.keepVersionAndProtocolConstant) {
-			info.version = this.SessionInfo.version;
-			info.protocol = this.SessionInfo.protocol;
-		}
-		return info;
-	}
-
-	async createSessionRequest(): Promise<SessionRequestOptions> {
-		//TODO: delete this
-		console.log("[FriendConnect] Creating Session Request");
-
-		const info = await this.getAdvertisement();
-
-		return {
-			properties: {
-				system: {
-					joinRestriction: "followed",
-					readRestriction: "followed",
-					closed: false,
-				},
-				custom: {
-					BroadcastSetting: 3,
-					CrossPlayDisabled: false,
-					Joinability: "joinable_by_friends",
-					LanGame: true,
-					MaxMemberCount:
-						parseInt(info.playersMax.toString()) ||
-						this.SessionInfo.maxPlayers,
-					MemberCount:
-						parseInt(info.playersOnline.toString()) ||
-						this.SessionInfo.players,
-					OnlineCrossPlatformGame: true,
-					SupportedConnections: [
-						{
-							ConnectionType: this.SessionInfo.connectionType,
-							HostIpAddress: this.SessionInfo.ip,
-							HostPort: this.SessionInfo.port,
-
-							RakNetGUID: "",
-						},
-					],
-					TitleId: 0,
-					hostName: this.SessionInfo.hostName,
-					ownerId: this.SessionInfo.xuid,
-					rakNetGUID: "",
-					worldName: this.SessionInfo.worldName,
-					worldType: "Survival",
-					protocol: this.SessionInfo.protocol,
-					version: this.SessionInfo.version,
-					levelId: "level",
-					TransportLayer: 0,
-				},
-			},
-			members: {
-				me: {
-					constants: {
-						system: {
-							xuid: this.SessionInfo.xuid,
-							initialize: true,
-						},
-					},
-					properties: {
-						system: {
-							active: true,
-							connection: this.SessionInfo.connectionId,
-							subscription: {
-								id: "845CC784-7348-4A27-BCDE-C083579DD113",
-								changeTypes: ["everything"],
-							},
-						},
-					},
-				},
-			},
-		};
-	}
-
-	createHandleRequest(version: number, type: string, sessionRef: sessionRef) {
-		return {
-			version: version,
-			type: type,
-			sessionRef: sessionRef,
-		};
-	}
-
-	async updateSession(sessionInfo?: SessionInfo) {
-		if (sessionInfo) {
-			this.getAdvertisement().then((advertisement) => {
-				sessionInfo.worldName =
-					advertisement.name || sessionInfo.worldName;
-				sessionInfo.players =
-					parseInt(advertisement.playersOnline.toString()) ||
-					sessionInfo.players;
-				(sessionInfo.maxPlayers =
-					parseInt(advertisement.playersMax.toString()) ||
-					sessionInfo.maxPlayers),
-					(sessionInfo.version = advertisement.version);
-				sessionInfo.protocol = advertisement.protocol;
-
-				if (this.log)
-					console.log(
-						"----------------------------------- Start of Server Advertisement\n",
-						JSON.parse(
-							JSON.stringify(advertisement).replace(
-								"ServerAdvertisement",
-								""
-							)
-						),
-						"\n----------------------------------- End of Server Advertisement"
-					);
-
-				this.updateSessionInfo(sessionInfo);
-				if (this.log)
-					console.log(
-						"----------------------------------- Start of Session Info\n",
-						this.SessionInfo,
-						"\n----------------------------------- End of Session Info"
-					);
-			});
-		}
-
-		//if (sessionInfo && sessionInfo.log) console.log("updateSession");
-
-		var createSessionContent = await this.createSessionRequest();
-		//console.log(createSessionContent);
-		const options = {
-			method: "PUT",
-			headers: {
-				"Content-Type": "application/json",
-				Authorization: this.xblInstance.tokenHeader,
-				"x-xbl-contract-version": 107,
-			},
-		};
-
-		//console.log(options);
-		let uri =
-			"https://sessiondirectory.xboxlive.com/serviceconfigs/" +
-			Constants.SERVICE_CONFIG_ID +
-			"/sessionTemplates/MinecraftLobby/sessions/" +
-			this.SessionInfo.sessionId;
-
-		const createSessionRequest = https.request(uri, options, (res) => {
-			//console.log("statusCode:", res.statusCode);
-			//console.log("headers:", res.headers);
-
-			res.on("data", (d) => {
-				if (sessionInfo && sessionInfo.log)
-					console.log(
-						"----------------------------------- Start of Update Session\n",
-						JSON.parse(d.toString()),
-						"\n----------------------------------- End of Update Session"
-					);
-				this.emit("sessionUpdated");
-			});
-
-			res.on("error", (err) => {
-				console.error(
-					"----------------------------------- Start of Update Session Error\n",
-					err,
-					"\n----------------------------------- End of Update Session Error"
-				);
-				this.messageLogger(err, undefined, "Update Session");
-			});
-		});
-		createSessionRequest.write(JSON.stringify(createSessionContent));
-
-		createSessionRequest.on("error", (error) => {
-			console.error(
-				"----------------------------------- Start of createSessionRequest Error\n",
-				error,
-				"\n----------------------------------- End of createSessionRequest Error"
-			);
-			this.messageLogger(error, undefined, "createSessionRequest");
-		});
-		createSessionRequest.end();
 	}
 }
+
 export { Session };

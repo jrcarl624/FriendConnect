@@ -3,11 +3,13 @@
 		"Authflow",
 		"cwebsocket",
 		"gamemode",
+		"gamertag",
 		"Joinability",
 		"prismarine",
 		"scid",
 		"Unfollowing",
 		"xboxlive",
-		"XSTS"
+		"XSTS",
+		"xuids"
 	]
 }

@@ -1,6 +1,6 @@
 {
   "name": "friend-connect",
-  "version": "0.3.3",
+  "version": "0.5.0",
   "description": "",
   "main": "./dist/index.js",
   "type": "module",
@@ -8,12 +8,14 @@
     "build": "tsc",
     "test": "node --es-module-specifier-resolution=node ./test/index.js",
     "test-n-build": "npm run build && npm run test",
-    "publish": "npm publish --access public "
+    "publish": "npm publish --access public ",
+    "test-n-build-mystic": "npm run build && node --es-module-specifier-resolution=node ./dist/mystic.js"
   },
   "author": "minerj101",
   "license": "GLPv3",
   "dependencies": {
-    "bedrock-protocol": "^3.14.0",
+    "bedrock-protocol": "^3.18.0",
+    "node-fetch": "^3.2.10",
     "prismarine-auth": "^1.5.4",
     "unirest": "^0.6.0",
     "websocket": "^1.0.34"
