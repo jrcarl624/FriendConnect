@@ -591,6 +591,34 @@ class SessionDirectory {
 		this.xbox = xboxLiveInstance;
 	}
 
+	queryHandles(
+		ownerXuid: string,
+		callback: ResponseCallback,
+		serviceConfigId?: string
+	): ClientRequest {
+		return request(
+			`${this.uri}/handles`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+				body: {
+					owners: {
+						people: {
+							moniker: "people",
+							monikerXuid: ownerXuid,
+						},
+					},
+					scid: serviceConfigId,
+					type: "activity",
+				},
+			},
+			callback
+		).end();
+	}
 	setActivity(
 		sessionReference: SessionDirectoryTypes.MultiplayerSessionReference,
 		callback?: ResponseCallback
@@ -1869,7 +1897,9 @@ class Session extends events.EventEmitter {
 	async createSessionRequest() {
 		if (this.additionalOptions.log)
 			console.log("[FriendConnect] Creating Session Request");
-		await this.getAdvertisement();
+		try {
+			await this.getAdvertisement();
+		} catch {}
 		return {
 			properties: {
 				system: {
