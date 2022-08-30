@@ -4,7 +4,6 @@
 *auth
 *dist
 .env
-*mystic
 temp/
 .env
 *.log
