@@ -15,6 +15,7 @@ new Session({
 	connectionType: 6,
 	autoFriending: true,
 	tokenPath: "./auth",
+	pingServerForInfo:true,
 	accounts: [process.env.EMAIL, process.env.EMAIL2],
 	constants: {
 		//gamemode: true,

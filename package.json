@@ -1,6 +1,6 @@
 {
   "name": "friend-connect",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "",
   "main": "./dist/index.js",
   "type": "module",
@@ -15,10 +15,9 @@
   "license": "GLPv3",
   "dependencies": {
     "bedrock-protocol": "^3.18.0",
-    "node-fetch": "^3.2.10",
+    "dotenv": "^16.0.1",
     "prismarine-auth": "^1.5.4",
     "unirest": "^0.6.0",
-    "dotenv": "^16.0.1",
     "websocket": "^1.0.34"
   },
   "repository": "https://github.com/minerj101/FriendConnect",

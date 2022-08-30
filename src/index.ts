@@ -1392,34 +1392,21 @@ interface LiveCache {
 	};
 }
 
-//console.log(new XboxLive(token).tokenHeader);
-
-interface AccountInfo {
-	email: string;
-	password?: string;
-}
-
 interface SessionOptionsConstants {
-	rakNetGUID: boolean;
-	protocol: boolean;
-	version: boolean;
-	worldName: boolean;
-	hostName: boolean;
-	gamemode: boolean;
-	maxConnectedPlayers: boolean;
-	connectedPlayers: boolean;
+	gamemode?: boolean;
+	protocol?: boolean;
+	version?: boolean;
+	worldName?: boolean;
+	hostName?: boolean;
+	maxConnectedPlayers?: boolean;
+	connectedPlayers?: boolean;
 }
 
 interface AdditionalSessionOptions {
-	autoFriending: boolean;
-	log: boolean;
-	constants: SessionOptionsConstants;
-
-	transferServer: {
-		ip: string;
-		port: number;
-		version: `${number}.${number}.${number}` | `${number}.${number}`;
-	};
+	autoFriending?: boolean;
+	log?: boolean;
+	constants?: SessionOptionsConstants;
+	pingServerForInfo?: boolean;
 }
 
 interface FriendConnectSessionInfoOptions {
@@ -1444,7 +1431,7 @@ interface FriendConnectSessionInfoOptions {
 	 */
 
 	joinability: "joinable_by_friends";
-
+	pingServerForInfo?: boolean;
 	protocol: number;
 	connectedPlayers: number;
 	maxConnectedPlayers: number;
@@ -1452,8 +1439,8 @@ interface FriendConnectSessionInfoOptions {
 	port: number;
 	log?: boolean;
 	connectionType: number;
-	autoFriending: boolean;
-	constants: SessionOptionsConstants;
+	autoFriending?: boolean;
+	constants?: SessionOptionsConstants;
 	accounts: string[];
 }
 interface MinecraftLobbyCustomProperties {
@@ -1519,6 +1506,9 @@ class Session extends EventEmitter {
 		if (options.log) this.additionalOptions.log = true;
 
 		options.joinability = options.joinability || "joinable_by_friends";
+
+		if (options.pingServerForInfo)
+			this.additionalOptions.pingServerForInfo = true;
 
 		if (options.autoFriending) this.additionalOptions.autoFriending = true;
 		this.additionalOptions.constants =
@@ -1704,15 +1694,11 @@ class Session extends EventEmitter {
 							friendXuids.set(account.email, new Set());
 							if (
 								friendsList.totalCount != 1000 &&
-								!this.fullOfFriends.includes(account.email)
+								!this.fullOfFriends.has(account.email)
 							)
-								this.fullOfFriends.push(account.email);
-							else if (
-								this.fullOfFriends.includes(account.email)
-							) {
-								this.fullOfFriends.splice(
-									this.fullOfFriends.indexOf(account.email)
-								);
+								this.fullOfFriends.add(account.email);
+							else if (this.fullOfFriends.has(account.email)) {
+								this.fullOfFriends.delete(account.email);
 							}
 							for (let person of friendsList.people) {
 								if (!person.isFollowingCaller) {
@@ -1879,7 +1865,7 @@ class Session extends EventEmitter {
 		};
 	}
 
-	fullOfFriends: string[] = [];
+	fullOfFriends: Set<string> = new Set();
 
 	setFriendInterval(accounts: IterableIterator<XboxLive>) {
 		for (let xbox of accounts) {
@@ -1888,7 +1874,7 @@ class Session extends EventEmitter {
 
 		setInterval(() => {
 			for (let account of accounts) {
-				if (!this.fullOfFriends.includes(account.email))
+				if (!this.fullOfFriends.has(account.email))
 					if (!account.isTokenRefreshing)
 						if (this.doingDuplicateFriendCheck) {
 							this.doingAutoFriendInterval = true;
@@ -2005,9 +1991,6 @@ class Session extends EventEmitter {
 				this.minecraftLobbyCustomOptions.protocol = info.protocol;
 			if (!this.additionalOptions.constants.version)
 				this.minecraftLobbyCustomOptions.version = info.version;
-			if (!this.additionalOptions.constants.rakNetGUID)
-				this.minecraftLobbyCustomOptions.SupportedConnections[0].RakNetGUID =
-					info.serverId;
 			if (!this.additionalOptions.constants.connectedPlayers)
 				this.minecraftLobbyCustomOptions.MemberCount =
 					//@ts-ignore
@@ -2025,7 +2008,8 @@ class Session extends EventEmitter {
 		if (this.additionalOptions.log)
 			console.log("[FriendConnect] Creating Session Request");
 		try {
-			this.getAdvertisement();
+			if (this.additionalOptions.pingServerForInfo)
+				this.getAdvertisement();
 		} catch (e) {}
 		return {
 			properties: {
