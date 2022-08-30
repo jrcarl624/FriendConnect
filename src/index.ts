@@ -1566,8 +1566,6 @@ class Session extends EventEmitter {
 				}
 			}
 			this.hostAccount = this.xboxAccounts.get(options.accounts[0]);
-			this.xboxAccounts.delete(options.accounts[0]);
-
 			const log = (...message: any[]) => {
 				if (this.additionalOptions.log)
 					console.log(
