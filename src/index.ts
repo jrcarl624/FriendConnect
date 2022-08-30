@@ -1477,11 +1477,8 @@ class Session extends EventEmitter {
 	public minecraftLobbyCustomOptions: MinecraftLobbyCustomProperties;
 	protected followerXuids: Record<string, string[]> = {};
 	protected friendXuids: Set<string> = new Set();
-	public additionalOptions: AdditionalSessionOptions =
-		{} as AdditionalSessionOptions;
-
+	public additionalOptions: AdditionalSessionOptions = {};
 	accountXuids: Set<string> = new Set();
-
 	accountsInitialized: number = 0;
 	accountsWithNoAchievements: number = 0;
 	constructor(options: FriendConnectSessionInfoOptions) {
@@ -1795,38 +1792,38 @@ class Session extends EventEmitter {
 		}
 	}
 	checkAchievements(accounts: IterableIterator<XboxLive>): void {
-		for (let xbox of accounts) {
+		for (let account of accounts) {
 			if (this.additionalOptions.log)
 				console.log(
-					`[FriendConnect ${xbox.email}] Checking for Achievements`
+					`[FriendConnect ${account.email}] Checking for Achievements`
 				);
 
 			try {
-				xbox.achievements.get(achievements => {
+				account.achievements.get(achievements => {
 					if (achievements.length === 0) {
 						if (this.additionalOptions.log)
 							console.log(
-								`[FriendConnect ${xbox.email}] Passed Achievement Check`
+								`[FriendConnect ${account.email}] Passed Achievement Check`
 							);
 						this.accountsWithNoAchievements++;
 						this.emit("achievementChecked");
 					} else {
 						throw new Error(
-							`This account "${xbox.email}" has achievements, please use an alt account without achievements to protect your account.`
+							`This account "${account.email}" has achievements, please use an alt account without achievements to protect your account.`
 						);
 					}
 				});
 			} catch (error) {
 				this.errorHandling(
 					error,
-					xbox.email,
+					account.email,
 					"Checking for Achievements"
 				);
 			}
 		}
 	}
-	ip: string;
-	port: string;
+	private ip: string;
+	private port: number;
 	createMinecraftLobbyCustomProperties(
 		xbox: XboxLive,
 		options: FriendConnectSessionInfoOptions
@@ -1978,7 +1975,7 @@ class Session extends EventEmitter {
 		try {
 			let info = await ping({
 				host: this.ip,
-				port: parseInt(this.port),
+				port: this.port,
 			});
 			if (!this.additionalOptions.constants.gamemode)
 				this.minecraftLobbyCustomOptions.worldType = info.gamemode;
