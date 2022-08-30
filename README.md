@@ -55,7 +55,7 @@ new Session({
 
 	tokenPath: "./auth", // The path to the directory that contains the authentication tokens.
 
-	accounts: ["example.com", "example.com"], // A list of emails that correspond to accounts you want to use with FriendConnect.
+	accounts: ["foo@example.com", "bar@example.com"], // A list of emails that correspond to accounts you want to use with FriendConnect.
 
 	//These are values retrieved from the server on when the server advertisement is fetched, if true it will use a value from above.
 	constants: {
@@ -69,9 +69,23 @@ new Session({
 });
 ```
 
-Set `type` to `module` in the package.json file.
+Set `type` to `module` in the `package.json` file.
+_If you don't know what I am talking about, make a file called `package.json` and add the following._
+
+```json
+{ "type": "module" }
+```
 
 You can run the file with `node --es-module-specifier-resolution=node ./path/to/file.js`.
+
+### Debug Info
+
+If you want to see extra debug information.
+Add a file called `.env` and add the following contents to the file.
+
+```ini
+FRIEND_CONNECT_DEBUG=true
+```
 
 ## To Do List
 
@@ -94,6 +108,7 @@ EMAIL="emails@example.com"
 EMAIL2="emails@example.com"
 IP="example.com"
 PORT=19132
+#Uncomment this if you want to see extra debug information
 #FRIEND_CONNECT_DEBUG=true
 ```
 

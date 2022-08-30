@@ -7,3 +7,4 @@
 *mystic
 temp/
 .env
+*.log

@@ -11,3 +11,4 @@ CODE_OF_CONDUCT.md
 tsconfig.json
 *mystic
 temp/
+*.log
