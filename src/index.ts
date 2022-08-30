@@ -140,7 +140,7 @@ const VerifyStringResultCodes = {
 	3: "Unknown error",
 };
 
-namespace SocialTypes {
+expoet namespace SocialTypes {
 	export interface PeopleList {
 		people: Person[];
 		totalCount: number;
@@ -200,9 +200,9 @@ const joinChunks = (res: IncomingMessage, callback: (body: string) => void) => {
 };
 
 class Social {
-	private readonly xbox: XboxLive;
+	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "https://social.xboxlive.com";
-	constructor(xboxLiveInstance: XboxLive) {
+	constructor(xboxLiveInstance: XboxLiveClient) {
 		this.xbox = xboxLiveInstance;
 	}
 	getFriends(callback: ResponseCallback): ClientRequest {
@@ -327,9 +327,9 @@ interface Achievement {
 	isRevoked: false;
 }
 class Achievements {
-	private readonly xbox: XboxLive;
+	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "https://achievements.xboxlive.com";
-	constructor(xboxLiveInstance: XboxLive) {
+	constructor(xboxLiveInstance: XboxLiveClient) {
 		this.xbox = xboxLiveInstance;
 	}
 
@@ -353,7 +353,7 @@ class Achievements {
 	}
 }
 
-namespace SessionDirectoryTypes {
+expoet namespace SessionDirectoryTypes {
 	export interface MultiplayerSessionRequest {
 		/**
 		 * Read-only settings that are merged with the session template to produce the constants for the session.
@@ -594,9 +594,9 @@ namespace SessionDirectoryTypes {
 }
 
 class SessionDirectory {
-	private readonly xbox: XboxLive;
+	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "https://sessiondirectory.xboxlive.com";
-	constructor(xboxLiveInstance: XboxLive) {
+	constructor(xboxLiveInstance: XboxLiveClient) {
 		this.xbox = xboxLiveInstance;
 	}
 
@@ -874,7 +874,7 @@ class SessionDirectory {
 	}
 }
 
-namespace PeopleHubTypes {
+export namespace PeopleHubTypes {
 	export interface Person {
 		xuid: string;
 		isFavorite: boolean;
@@ -943,9 +943,9 @@ namespace PeopleHubTypes {
 }
 
 class PeopleHub {
-	private readonly xbox: XboxLive;
+	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "https://peoplehub.xboxlive.com";
-	constructor(xboxLiveInstance: XboxLive) {
+	constructor(xboxLiveInstance: XboxLiveClient) {
 		this.xbox = xboxLiveInstance;
 	}
 	getFollowers(
@@ -974,7 +974,7 @@ class PeopleHub {
 }
 
 class RTAMultiplayerSession extends EventEmitter {
-	private readonly xbox: XboxLive;
+	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "wss://rta.xboxlive.com";
 	readonly sessionName: string;
 	private firstConnectionId: boolean = true;
@@ -992,7 +992,7 @@ class RTAMultiplayerSession extends EventEmitter {
 		rtaMultiplayerSession: RTAMultiplayerSession
 	) => void;
 	constructor(
-		xbox: XboxLive,
+		xbox: XboxLiveClient,
 		multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest,
 		serviceConfigId: string,
 		sessionTemplateName: string,
@@ -1141,7 +1141,7 @@ class RTAMultiplayerSession extends EventEmitter {
 		);
 	}
 
-	join(xbox: XboxLive) {
+	join(xbox: XboxLiveClient) {
 		this.functionsToRunOnSessionUpdate.push(() => {
 			xbox.sessionDirectory.sessionKeepAlivePacket(
 				this.serviceConfigId,
@@ -1202,7 +1202,7 @@ interface MsaResponse {
 	interval: number;
 	message: string;
 }
-class XboxLive extends EventEmitter {
+export class XboxLiveClient extends EventEmitter {
 	token: XboxLiveToken;
 	#isTokenRefreshing: boolean = true;
 
@@ -1471,8 +1471,8 @@ interface MinecraftLobbyCustomProperties {
 //TODO updating player number and motd
 
 class Session extends EventEmitter {
-	protected xboxAccounts: Map<string, XboxLive> = new Map();
-	hostAccount: XboxLive;
+	protected xboxAccounts: Map<string, XboxLiveClient> = new Map();
+	hostAccount: XboxLiveClient;
 	protected sessionInstance: RTAMultiplayerSession;
 	public minecraftLobbyCustomOptions: MinecraftLobbyCustomProperties;
 	protected followerXuids: Record<string, string[]> = {};
@@ -1608,7 +1608,7 @@ class Session extends EventEmitter {
 					log(event.code);
 					log(event.reason);
 					log(event.wasClean);
-					log("Restarting");
+					log("Restarting...");
 				});
 				this.sessionInstance.on("error", (error: Error) => {
 					this.errorHandling(
@@ -1772,7 +1772,7 @@ class Session extends EventEmitter {
 		this.accountsInitialized = 0;
 		for (let email of accountEmails) {
 			//debug("Accounts initialized: " + this.accountsInitialized);
-			let xbox = new XboxLive(email, tokenPath, {
+			let xbox = new XboxLiveClient(email, tokenPath, {
 				authTitle: Titles.MinecraftNintendoSwitch,
 				deviceType: "Nintendo",
 			});
@@ -1791,7 +1791,7 @@ class Session extends EventEmitter {
 			});
 		}
 	}
-	checkAchievements(accounts: IterableIterator<XboxLive>): void {
+	checkAchievements(accounts: IterableIterator<XboxLiveClient>): void {
 		for (let account of accounts) {
 			if (this.additionalOptions.log)
 				console.log(
@@ -1825,7 +1825,7 @@ class Session extends EventEmitter {
 	private ip: string;
 	private port: number;
 	createMinecraftLobbyCustomProperties(
-		xbox: XboxLive,
+		xbox: XboxLiveClient,
 		options: FriendConnectSessionInfoOptions
 	): MinecraftLobbyCustomProperties {
 		this.ip = options.ip;
@@ -1864,7 +1864,7 @@ class Session extends EventEmitter {
 
 	fullOfFriends: Set<string> = new Set();
 
-	setFriendInterval(accounts: IterableIterator<XboxLive>) {
+	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
 		for (let xbox of accounts) {
 			this.followerXuids[xbox.email] = [];
 		}
