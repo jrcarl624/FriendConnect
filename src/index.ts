@@ -1626,6 +1626,7 @@ class Session extends EventEmitter {
 				this.sessionInstance.on("sessionResponse", session => {
 					if (firstResponse) {
 						for (let i of this.xboxAccounts.values()) {
+							if (i == this.hostAccount) continue;
 							this.sessionInstance.join(i);
 							firstResponse = false;
 						}
@@ -1824,8 +1825,8 @@ class Session extends EventEmitter {
 			}
 		}
 	}
-	ip;
-	port;
+	ip: string;
+	port: string;
 	createMinecraftLobbyCustomProperties(
 		xbox: XboxLive,
 		options: FriendConnectSessionInfoOptions
