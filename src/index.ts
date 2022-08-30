@@ -1585,7 +1585,8 @@ class Session extends EventEmitter {
 					options
 				);
 			setInterval(() => {
-				this.getAdvertisement();
+				if (this.additionalOptions.pingServerForInfo)
+					this.getAdvertisement();
 			}, 15000);
 			this.createSessionRequest().then(request => {
 				//debug(request);
