@@ -8,7 +8,7 @@
     "build": "tsc",
     "test": "node --es-module-specifier-resolution=node ./test/index.js",
     "test-n-build": "npm run build && npm run test",
-    "publish": "npm publish --access public ",
+    "publish": "npm run build && npm publish --access public ",
     "test-n-build-mystic": "npm run build && node --es-module-specifier-resolution=node ./dist/mystic.js"
   },
   "author": "minerj101",
