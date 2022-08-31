@@ -140,7 +140,7 @@ const VerifyStringResultCodes = {
 	3: "Unknown error",
 };
 
-expoet namespace SocialTypes {
+export namespace SocialTypes {
 	export interface PeopleList {
 		people: Person[];
 		totalCount: number;
@@ -353,7 +353,7 @@ class Achievements {
 	}
 }
 
-expoet namespace SessionDirectoryTypes {
+export namespace SessionDirectoryTypes {
 	export interface MultiplayerSessionRequest {
 		/**
 		 * Read-only settings that are merged with the session template to produce the constants for the session.
@@ -985,7 +985,7 @@ class RTAMultiplayerSession extends EventEmitter {
 	protected startTimes: number = 0;
 	multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest;
 
-	functionsToRunOnSessionUpdate: (() => void)[] = [];
+	functionsToRunOnSessionUpdate: Set<() => void> = new Set();
 
 	firstStartSignaled: boolean = false;
 	private readonly updateSessionCallback: (
@@ -1014,7 +1014,7 @@ class RTAMultiplayerSession extends EventEmitter {
 					i();
 				}
 		}, 28000);
-		this.functionsToRunOnSessionUpdate.push(() => {
+		this.functionsToRunOnSessionUpdate.add(() => {
 			this.join(this.xbox);
 			this.updateSession();
 		});
@@ -1142,7 +1142,7 @@ class RTAMultiplayerSession extends EventEmitter {
 	}
 
 	join(xbox: XboxLiveClient) {
-		this.functionsToRunOnSessionUpdate.push(() => {
+		this.functionsToRunOnSessionUpdate.add(() => {
 			xbox.sessionDirectory.sessionKeepAlivePacket(
 				this.serviceConfigId,
 				this.sessionTemplateName,
@@ -1468,19 +1468,31 @@ interface MinecraftLobbyCustomProperties {
 	protocol: number;
 	version: string;
 }
-//TODO updating player number and motd
-
+//TODO add events to the social class the emits friendAdded on response so there is no duplicateEvents same for other events. also clean up the code for the xbox live client so it returns the values instead of a response
 class Session extends EventEmitter {
-	protected xboxAccounts: Map<string, XboxLiveClient> = new Map();
-	hostAccount: XboxLiveClient;
-	protected sessionInstance: RTAMultiplayerSession;
+	public xboxAccounts: Map<string, XboxLiveClient> = new Map();
+
+	public hostAccount: XboxLiveClient;
+
+	#sessionInstance: RTAMultiplayerSession;
+	get sessionInstance(): RTAMultiplayerSession {
+		return this.#sessionInstance;
+	}
 	public minecraftLobbyCustomOptions: MinecraftLobbyCustomProperties;
-	protected followerXuids: Record<string, string[]> = {};
-	protected friendXuids: Set<string> = new Set();
+	#friendXuids: Set<string> = new Set();
+	get friendXuids(): IterableIterator<string> {
+		return this.#friendXuids.values();
+	}
+
 	public additionalOptions: AdditionalSessionOptions = {};
-	accountXuids: Set<string> = new Set();
-	accountsInitialized: number = 0;
-	accountsWithNoAchievements: number = 0;
+	#accountXuids: Set<string> = new Set();
+
+	get accountXuids(): IterableIterator<string> {
+		return this.#accountXuids.values();
+	}
+
+	#accountsInitialized: number = 0;
+	#accountsWithNoAchievements: number = 0;
 	constructor(options: FriendConnectSessionInfoOptions) {
 		super();
 
@@ -1517,11 +1529,11 @@ class Session extends EventEmitter {
 		this.initializeAccounts(options.accounts, options.tokenPath);
 
 		this.on("accountInitialized", () => {
-			if (this.accountsInitialized >= options.accounts.length)
+			if (this.#accountsInitialized >= options.accounts.length)
 				this.checkAchievements(this.xboxAccounts.values());
 		});
 		this.on("achievementChecked", () => {
-			if (this.accountsWithNoAchievements >= options.accounts.length)
+			if (this.#accountsWithNoAchievements >= options.accounts.length)
 				this.emit("accountsDoNotHaveAchievements");
 			//debug(this.accountsWithNoAchievements);
 		});
@@ -1551,18 +1563,20 @@ class Session extends EventEmitter {
 				}, 1800000);
 			}
 			for (const i of this.xboxAccounts.values()) {
+				if (!this.hostAccount) this.hostAccount = i;
 				for (let j of this.xboxAccounts.values()) {
 					debug(i.email, j.email);
 					if (i != j)
 						i.social.addFriend(j.token.userXUID, res => {
 							debug(res.statusCode);
+							this.#friendXuids.add(j.token.userXUID);
 							res.on("data", data => {
 								debug(data);
 							});
 						});
 				}
 			}
-			this.hostAccount = this.xboxAccounts.get(options.accounts[0]);
+
 			const log = (...message: any[]) => {
 				if (this.additionalOptions.log)
 					console.log(
@@ -1585,7 +1599,7 @@ class Session extends EventEmitter {
 			}, 15000);
 			this.createSessionRequest().then(request => {
 				//debug(request);
-				this.sessionInstance = new RTAMultiplayerSession(
+				this.#sessionInstance = new RTAMultiplayerSession(
 					this.hostAccount,
 					//@ts-ignore
 					request,
@@ -1597,20 +1611,20 @@ class Session extends EventEmitter {
 					}
 				);
 
-				this.sessionInstance.on("message", (event: IMessageEvent) => {
+				this.#sessionInstance.on("message", (event: IMessageEvent) => {
 					log(event);
 				});
 
-				this.sessionInstance.on("open", () => {
+				this.#sessionInstance.on("open", () => {
 					log("Connected to RTA Websocket");
 				});
-				this.sessionInstance.on("close", (event: ICloseEvent) => {
+				this.#sessionInstance.on("close", (event: ICloseEvent) => {
 					log(event.code);
 					log(event.reason);
 					log(event.wasClean);
 					log("Restarting...");
 				});
-				this.sessionInstance.on("error", (error: Error) => {
+				this.#sessionInstance.on("error", (error: Error) => {
 					this.errorHandling(
 						error,
 						this.hostAccount.email,
@@ -1620,11 +1634,11 @@ class Session extends EventEmitter {
 				});
 
 				let firstResponse = true;
-				this.sessionInstance.on("sessionResponse", session => {
+				this.#sessionInstance.on("sessionResponse", session => {
 					if (firstResponse) {
 						for (let i of this.xboxAccounts.values()) {
 							if (i == this.hostAccount) continue;
-							this.sessionInstance.join(i);
+							this.#sessionInstance.join(i);
 							firstResponse = false;
 						}
 					}
@@ -1635,7 +1649,7 @@ class Session extends EventEmitter {
 							let member = session.members[i];
 							console.log(session.members[i]);
 							if (
-								this.accountXuids.has(
+								this.#accountXuids.has(
 									session.members[i].constants.system.xuid
 								)
 							)
@@ -1648,9 +1662,9 @@ class Session extends EventEmitter {
 								0
 							)
 								this.hostAccount.sessionDirectory.removeMember(
-									this.sessionInstance.serviceConfigId,
-									this.sessionInstance.sessionTemplateName,
-									this.sessionInstance.sessionName,
+									this.#sessionInstance.serviceConfigId,
+									this.#sessionInstance.sessionTemplateName,
+									this.#sessionInstance.sessionName,
 									parseInt(i)
 								);
 						}
@@ -1669,7 +1683,7 @@ class Session extends EventEmitter {
 		let friendXuids = new Map<string, Set<string>>();
 
 		for (let account of this.xboxAccounts.values()) {
-			this.accountXuids.add(account.token.userXUID);
+			this.#accountXuids.add(account.token.userXUID);
 			https
 				.request(
 					`https://social.xboxlive.com/users/me/people`,
@@ -1688,18 +1702,24 @@ class Session extends EventEmitter {
 						res.on("end", () => {
 							let friendsList: SocialTypes.PeopleList =
 								JSON.parse(friends);
-							friendXuids.set(account.email, new Set());
+							friendXuids.set(account.token.userXUID, new Set());
 							if (
 								friendsList.totalCount != 1000 &&
-								!this.fullOfFriends.has(account.email)
+								!this.fullOfFriends.has(account.token.userXUID)
 							)
-								this.fullOfFriends.add(account.email);
-							else if (this.fullOfFriends.has(account.email)) {
-								this.fullOfFriends.delete(account.email);
+								this.fullOfFriends.add(account.token.userXUID);
+							else if (
+								this.fullOfFriends.has(account.token.userXUID)
+							) {
+								this.fullOfFriends.delete(
+									account.token.userXUID
+								);
 							}
 							for (let person of friendsList.people) {
 								if (!person.isFollowingCaller) {
 									account.social.removeFriend(person.xuid);
+									this.#friendXuids.delete(person.xuid);
+
 									if (this.additionalOptions.log)
 										console.log(
 											`[FriendConnect ${account.email}] Removed Friend ${person.xuid}`
@@ -1710,9 +1730,9 @@ class Session extends EventEmitter {
 									});
 								} else {
 									friendXuids
-										.get(account.email)
+										.get(account.token.userXUID)
 										.add(person.xuid);
-									this.friendXuids.add(person.xuid);
+									this.#friendXuids.add(person.xuid);
 								}
 							}
 							friendsGot++;
@@ -1740,8 +1760,8 @@ class Session extends EventEmitter {
 					}
 				}
 
-				for (let person of duplicateMap.keys()) {
-					let emailSet: Set<string> = duplicateMap.get(person);
+				for (let personXuid of duplicateMap.keys()) {
+					let emailSet: Set<string> = duplicateMap.get(personXuid);
 					let skipEmail: boolean = true;
 					for (let j of emailSet) {
 						if (skipEmail) {
@@ -1750,14 +1770,16 @@ class Session extends EventEmitter {
 						}
 
 						let account = this.xboxAccounts.get(j);
-						if (!this.accountXuids.has(person)) {
-							account.social.removeFriend(person);
+						if (!this.#accountXuids.has(personXuid)) {
+							account.social.removeFriend(personXuid);
+							this.#friendXuids.delete(personXuid);
+
 							console.log(
-								`[FriendConnect ${account.email}] Removed Friend ${person}`
+								`[FriendConnect ${account.email}] Removed Friend ${personXuid}`
 							);
 							this.emit("friendRemoved", {
 								account,
-								person,
+								person: personXuid,
 							});
 						}
 					}
@@ -1769,7 +1791,7 @@ class Session extends EventEmitter {
 	}
 
 	initializeAccounts(accountEmails: string[], tokenPath: string): void {
-		this.accountsInitialized = 0;
+		this.#accountsInitialized = 0;
 		for (let email of accountEmails) {
 			//debug("Accounts initialized: " + this.accountsInitialized);
 			let xbox = new XboxLiveClient(email, tokenPath, {
@@ -1781,8 +1803,8 @@ class Session extends EventEmitter {
 					`[FriendConnect ${xbox.email}] Initializing Account`
 				);
 			xbox.on("firstTokenAcquired", () => {
-				this.xboxAccounts.set(xbox.email, xbox);
-				this.accountsInitialized++;
+				this.xboxAccounts.set(xbox.token.userXUID, xbox);
+				this.#accountsInitialized++;
 				if (this.additionalOptions.log)
 					console.log(
 						`[FriendConnect ${xbox.email}] Account Initialized`
@@ -1805,7 +1827,7 @@ class Session extends EventEmitter {
 							console.log(
 								`[FriendConnect ${account.email}] Passed Achievement Check`
 							);
-						this.accountsWithNoAchievements++;
+						this.#accountsWithNoAchievements++;
 						this.emit("achievementChecked");
 					} else {
 						throw new Error(
@@ -1865,13 +1887,9 @@ class Session extends EventEmitter {
 	fullOfFriends: Set<string> = new Set();
 
 	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
-		for (let xbox of accounts) {
-			this.followerXuids[xbox.email] = [];
-		}
-
 		setInterval(() => {
 			for (let account of accounts) {
-				if (!this.fullOfFriends.has(account.email))
+				if (!this.fullOfFriends.has(account.token.userXUID))
 					if (!account.isTokenRefreshing)
 						if (this.doingDuplicateFriendCheck) {
 							this.doingAutoFriendInterval = true;
@@ -1909,13 +1927,14 @@ class Session extends EventEmitter {
 												if (person.isFollowingCaller) {
 													if (
 														!person.isFollowedByCaller &&
-														!this.friendXuids.has(
+														!this.#friendXuids.has(
 															person.xuid
 														)
 													) {
 														account.social.addFriend(
 															person.xuid
 														);
+
 														if (
 															this
 																.additionalOptions
@@ -1924,6 +1943,9 @@ class Session extends EventEmitter {
 															console.log(
 																`[FriendConnect ${account.email}] Added Friend ${person.gamertag}`
 															);
+														this.#friendXuids.add(
+															person.xuid
+														);
 														this.emit(
 															"friendAdded",
 															{
@@ -1975,7 +1997,7 @@ class Session extends EventEmitter {
 		try {
 			let info = await ping({
 				host: this.ip,
-				port: this.port,
+				port: parseInt(`${this.port}`),
 			});
 			if (!this.additionalOptions.constants.gamemode)
 				this.minecraftLobbyCustomOptions.worldType = info.gamemode;
