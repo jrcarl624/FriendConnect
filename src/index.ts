@@ -1889,9 +1889,7 @@ class Session extends EventEmitter {
 	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
 		setInterval(() => {
 			for (let account of accounts) {
-				if (!this.fullOfFriends.has(account.token.userXUID))
-					if (!account.isTokenRefreshing)
-						if (this.doingDuplicateFriendCheck) {
+				if (!(this.fullOfFriends.has(account.token.userXUID) || account.isTokenRefreshing || this.doingDuplicateFriendCheck)) {
 							this.doingAutoFriendInterval = true;
 							if (this.additionalOptions.log)
 								console.log(
