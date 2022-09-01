@@ -1550,7 +1550,6 @@ class Session extends EventEmitter {
 				this.setFriendInterval(this.xboxAccounts.values());
 
 			if (this.xboxAccounts.size != 1) {
-				this.duplicateFriendCheck();
 				setInterval(() => {
 					if (!this.doingAutoFriendInterval)
 						try {
