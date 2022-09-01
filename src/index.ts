@@ -1490,6 +1490,7 @@ class Session extends EventEmitter {
 	get accountXuids(): IterableIterator<string> {
 		return this.#accountXuids.values();
 	}
+	public fullOfFriends: Set<string> = new Set();
 
 	#accountsInitialized: number = 0;
 	#accountsWithNoAchievements: number = 0;
@@ -1549,6 +1550,7 @@ class Session extends EventEmitter {
 				this.setFriendInterval(this.xboxAccounts.values());
 
 			if (this.xboxAccounts.size != 1) {
+				this.duplicateFriendCheck();
 				setInterval(() => {
 					if (!this.doingAutoFriendInterval)
 						try {
@@ -1678,11 +1680,14 @@ class Session extends EventEmitter {
 
 	duplicateFriendCheck(callback?: () => void) {
 		this.doingDuplicateFriendCheck = true;
-
 		let friendsGot = 0;
 		let friendXuids = new Map<string, Set<string>>();
 
 		for (let account of this.xboxAccounts.values()) {
+			if (this.additionalOptions.log)
+				console.log(
+					`[FriendConnect ${account.email}] Duplicate Friend Check Interval`
+				);
 			this.#accountXuids.add(account.token.userXUID);
 			https
 				.request(
@@ -1884,111 +1889,97 @@ class Session extends EventEmitter {
 		};
 	}
 
-	fullOfFriends: Set<string> = new Set();
-
 	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
 		setInterval(() => {
 			for (let account of accounts) {
-				if (!this.fullOfFriends.has(account.token.userXUID))
-					if (!account.isTokenRefreshing)
-						if (this.doingDuplicateFriendCheck) {
-							this.doingAutoFriendInterval = true;
-							if (this.additionalOptions.log)
-								console.log(
-									`[FriendConnect ${account.email}] AutoFriend Interval`
-								);
-							let req = request(
-								"https://peoplehub.xboxlive.com/users/me/people/followers",
-								{
-									method: "GET",
-									headers: {
-										Authorization: account.tokenHeader,
-										"x-xbl-contract-version": 5,
-										"Accept-Language": "en-us",
-									},
-								},
-								res => {
-									//console.log(res.statusCode, res.statusMessage);
-									var body = "";
-									res.on("data", chunk => {
-										body += chunk;
-									});
+				if (
+					!this.fullOfFriends.has(account.token.userXUID) &&
+					!this.doingDuplicateFriendCheck &&
+					!account.isTokenRefreshing
+				)
+					this.doingAutoFriendInterval = true;
+				if (this.additionalOptions.log)
+					console.log(
+						`[FriendConnect ${account.email}] AutoFriend Interval`
+					);
+				let req = request(
+					"https://peoplehub.xboxlive.com/users/me/people/followers",
+					{
+						method: "GET",
+						headers: {
+							Authorization: account.tokenHeader,
+							"x-xbl-contract-version": 5,
+							"Accept-Language": "en-us",
+						},
+					},
+					res => {
+						//console.log(res.statusCode, res.statusMessage);
+						var body = "";
+						res.on("data", chunk => {
+							body += chunk;
+						});
 
-									res.on("end", () => {
-										try {
-											let data: PeopleHubTypes.PeopleList =
-												JSON.parse(body);
+						res.on("end", () => {
+							try {
+								let data: PeopleHubTypes.PeopleList =
+									JSON.parse(body);
+								if (this.additionalOptions.log)
+									console.log(
+										`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
+									);
+
+								for (let person of data.people) {
+									if (person.isFollowingCaller) {
+										if (
+											!person.isFollowedByCaller &&
+											!this.#friendXuids.has(person.xuid)
+										) {
+											account.social.addFriend(
+												person.xuid
+											);
+
 											if (this.additionalOptions.log)
 												console.log(
-													`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
+													`[FriendConnect ${account.email}] Added Friend ${person.gamertag}`
 												);
-
-											for (let person of data.people) {
-												if (person.isFollowingCaller) {
-													if (
-														!person.isFollowedByCaller &&
-														!this.#friendXuids.has(
-															person.xuid
-														)
-													) {
-														account.social.addFriend(
-															person.xuid
-														);
-
-														if (
-															this
-																.additionalOptions
-																.log
-														)
-															console.log(
-																`[FriendConnect ${account.email}] Added Friend ${person.gamertag}`
-															);
-														this.#friendXuids.add(
-															person.xuid
-														);
-														this.emit(
-															"friendAdded",
-															{
-																account,
-																person: person.xuid,
-															}
-														);
-													}
-												}
-											}
-											this.doingAutoFriendInterval =
-												false;
-										} catch (error) {
-											this.errorHandling(
-												error,
-												account.email,
-												"AutoFriend Interval"
-											);
-											this.doingAutoFriendInterval =
-												false;
+											this.#friendXuids.add(person.xuid);
+											this.emit("friendAdded", {
+												account,
+												person: person.xuid,
+											});
 										}
-									});
-
-									res.on("error", error => {
-										this.errorHandling(
-											error,
-											account.email,
-											"AutoFriend Interval"
-										);
-										this.doingAutoFriendInterval = false;
-									});
+									}
 								}
-							);
-							req.on("error", error => {
+								this.doingAutoFriendInterval = false;
+							} catch (error) {
 								this.errorHandling(
 									error,
 									account.email,
 									"AutoFriend Interval"
 								);
 								this.doingAutoFriendInterval = false;
-							});
-							req.end();
-						}
+							}
+						});
+
+						res.on("error", error => {
+							this.errorHandling(
+								error,
+								account.email,
+								"AutoFriend Interval"
+							);
+							this.doingAutoFriendInterval = false;
+						});
+					}
+				);
+				req.on("error", error => {
+					this.errorHandling(
+						error,
+						account.email,
+						"AutoFriend Interval"
+					);
+					this.doingAutoFriendInterval = false;
+				});
+				req.end();
 			}
 		}, 15000);
 	}
