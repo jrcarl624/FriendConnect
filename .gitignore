@@ -5,5 +5,5 @@
 *dist
 .env
 temp/
-.env
+*.env
 *.log
