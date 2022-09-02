@@ -67,11 +67,12 @@ const request = (
 	const req = https.request(url, options, res => {
 		res.on("data", data => {
 			debug(res.statusCode);
-			try {
-				debug(JSON.parse(data));
-			} catch {
-				debug(data.toString());
-			}
+			if (process.env.FRIEND_CONNECT_DEBUG)
+				try {
+					console.log(JSON.parse(data));
+				} catch {
+					console.log(data.toString());
+				}
 		});
 
 		if (callback) callback(res);
@@ -1007,33 +1008,33 @@ class RTAMultiplayerSession extends EventEmitter {
 		this.serviceConfigId = serviceConfigId;
 		this.sessionTemplateName = sessionTemplateName;
 		this.xbox = xbox;
-
 		setInterval(() => {
 			if (this.websocketConnected && !this.xbox.isTokenRefreshing)
 				for (let i of this.functionsToRunOnSessionUpdate) {
 					i();
 				}
-		}, 28000);
+		}, 27600);
 		this.functionsToRunOnSessionUpdate.add(() => {
-			this.join(this.xbox);
 			this.updateSession();
 		});
-		//console.log("Session started");
 		this.start();
 	}
 
 	private start() {
+		if (this.websocketConnected) return void 0;
 		if (this.startTimes >= 5) {
 			fs.unlinkSync(
 				`${this.xbox.authPath}/${this.xbox.emailHash}_xbl-cache.json`
 			);
-			fs.unlinkSync(
-				`${this.xbox.authPath}/${this.xbox.emailHash}_live-cache.json`
-			);
-			this.xbox.refreshToken(() => {
-				this.start();
-			});
-			return void 0;
+			//fs.unlinkSync(`${this.xbox.authPath}/${this.xbox.emailHash}_live-cache.json`);
+			this.startTimes = 0;
+			setTimeout(() => {
+				this.xbox.refreshToken(() => {
+					this.emit("timeUntilStart");
+					this.start();
+					return void 0;
+				});
+			}, 29000);
 		}
 
 		this.startTimes++;
@@ -1048,7 +1049,6 @@ class RTAMultiplayerSession extends EventEmitter {
 		ws.onerror = (error: Error) => {
 			this.websocketConnected = false;
 			this.emit("error", error);
-			this.start();
 		};
 		ws.onopen = () => {
 			ws.send(
@@ -1059,20 +1059,15 @@ class RTAMultiplayerSession extends EventEmitter {
 		};
 		ws.onclose = (event: ICloseEvent) => {
 			this.websocketConnected = false;
-			this.start();
 			this.emit("close", event);
 		};
 		ws.onmessage = (event: IMessageEvent) => {
 			switch (typeof event.data) {
 				case "string":
-					if (
-						this.firstConnectionId &&
-						event.data.includes("ConnectionId")
-					) {
+					if (event.data.includes("ConnectionId")) {
 						this.connectionId = JSON.parse(
 							event.data
 						)[4].ConnectionId;
-						//@ts-ignore
 						this.firstConnectionId = false;
 						//debug("connectionId: " + this.connectionId);
 						this.updateSession();
@@ -1087,34 +1082,30 @@ class RTAMultiplayerSession extends EventEmitter {
 		//debug("updateSession called");
 		if (this.updateSessionCallback) this.updateSessionCallback(this);
 
-		let modRequest = this.multiplayerSessionRequest;
-
-		if (this.firstSession) {
-			//@ts-ignore
-			this.multiplayerSessionRequest.members = {
-				me: {
-					constants: {
-						system: {
-							initialize: true,
-							xuid: this.xbox.token.userXUID,
-						},
+		//@ts-ignore
+		this.multiplayerSessionRequest.members = {
+			me: {
+				constants: {
+					system: {
+						initialize: true,
+						xuid: this.xbox.token.userXUID,
 					},
-					properties: {
-						system: {
-							active: true,
-							connection: this.connectionId,
-							subscription: {
-								changeTypes: ["everything"],
-								id: "9042513B-D0CF-48F6-AF40-AD83B3C9EED4",
-							},
+				},
+				properties: {
+					system: {
+						active: true,
+						connection: this.connectionId,
+						subscription: {
+							changeTypes: ["everything"],
+							id: "9042513B-D0CF-48F6-AF40-AD83B3C9EED4",
 						},
 					},
 				},
-			};
-		}
+			},
+		};
 
 		this.xbox.sessionDirectory.session(
-			modRequest,
+			this.multiplayerSessionRequest,
 			this.serviceConfigId,
 			this.sessionTemplateName,
 			this.sessionName,
@@ -1177,7 +1168,7 @@ class RTAMultiplayerSession extends EventEmitter {
 			this.serviceConfigId,
 			this.sessionTemplateName,
 			this.sessionName,
-			res => {
+			() => {
 				xbox.sessionDirectory.setActivity(
 					{
 						scid: this.serviceConfigId,
@@ -1890,11 +1881,6 @@ class Session extends EventEmitter {
 	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
 		for (let account of accounts) {
 			setInterval(() => {
-				console.log(
-					!this.fullOfFriends.has(account.token.userXUID),
-					!this.doingDuplicateFriendCheck,
-					!account.isTokenRefreshing
-				);
 				if (
 					!this.fullOfFriends.has(account.token.userXUID) && // maybe error
 					!this.doingDuplicateFriendCheck &&
