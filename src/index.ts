@@ -67,11 +67,12 @@ const request = (
 	const req = https.request(url, options, res => {
 		res.on("data", data => {
 			debug(res.statusCode);
-			try {
-				debug(JSON.parse(data));
-			} catch {
-				debug(data.toString());
-			}
+			if (process.env.FRIEND_CONNECT_DEBUG)
+				try {
+					console.log(JSON.parse(data));
+				} catch {
+					console.log(data.toString());
+				}
 		});
 
 		if (callback) callback(res);
@@ -1007,33 +1008,33 @@ class RTAMultiplayerSession extends EventEmitter {
 		this.serviceConfigId = serviceConfigId;
 		this.sessionTemplateName = sessionTemplateName;
 		this.xbox = xbox;
-
 		setInterval(() => {
 			if (this.websocketConnected && !this.xbox.isTokenRefreshing)
 				for (let i of this.functionsToRunOnSessionUpdate) {
 					i();
 				}
-		}, 28000);
+		}, 27600);
 		this.functionsToRunOnSessionUpdate.add(() => {
-			this.join(this.xbox);
 			this.updateSession();
 		});
-		//console.log("Session started");
 		this.start();
 	}
 
 	private start() {
+		if (this.websocketConnected) return void 0;
 		if (this.startTimes >= 5) {
 			fs.unlinkSync(
 				`${this.xbox.authPath}/${this.xbox.emailHash}_xbl-cache.json`
 			);
-			fs.unlinkSync(
-				`${this.xbox.authPath}/${this.xbox.emailHash}_live-cache.json`
-			);
-			this.xbox.refreshToken(() => {
-				this.start();
-			});
-			return void 0;
+			//fs.unlinkSync(`${this.xbox.authPath}/${this.xbox.emailHash}_live-cache.json`);
+			this.startTimes = 0;
+			setTimeout(() => {
+				this.xbox.refreshToken(() => {
+					this.emit("timeUntilStart");
+					this.start();
+					return void 0;
+				});
+			}, 29000);
 		}
 
 		this.startTimes++;
@@ -1048,7 +1049,6 @@ class RTAMultiplayerSession extends EventEmitter {
 		ws.onerror = (error: Error) => {
 			this.websocketConnected = false;
 			this.emit("error", error);
-			this.start();
 		};
 		ws.onopen = () => {
 			ws.send(
@@ -1059,20 +1059,15 @@ class RTAMultiplayerSession extends EventEmitter {
 		};
 		ws.onclose = (event: ICloseEvent) => {
 			this.websocketConnected = false;
-			this.start();
 			this.emit("close", event);
 		};
 		ws.onmessage = (event: IMessageEvent) => {
 			switch (typeof event.data) {
 				case "string":
-					if (
-						this.firstConnectionId &&
-						event.data.includes("ConnectionId")
-					) {
+					if (event.data.includes("ConnectionId")) {
 						this.connectionId = JSON.parse(
 							event.data
 						)[4].ConnectionId;
-						//@ts-ignore
 						this.firstConnectionId = false;
 						//debug("connectionId: " + this.connectionId);
 						this.updateSession();
@@ -1087,34 +1082,30 @@ class RTAMultiplayerSession extends EventEmitter {
 		//debug("updateSession called");
 		if (this.updateSessionCallback) this.updateSessionCallback(this);
 
-		let modRequest = this.multiplayerSessionRequest;
-
-		if (this.firstSession) {
-			//@ts-ignore
-			this.multiplayerSessionRequest.members = {
-				me: {
-					constants: {
-						system: {
-							initialize: true,
-							xuid: this.xbox.token.userXUID,
-						},
+		//@ts-ignore
+		this.multiplayerSessionRequest.members = {
+			me: {
+				constants: {
+					system: {
+						initialize: true,
+						xuid: this.xbox.token.userXUID,
 					},
-					properties: {
-						system: {
-							active: true,
-							connection: this.connectionId,
-							subscription: {
-								changeTypes: ["everything"],
-								id: "9042513B-D0CF-48F6-AF40-AD83B3C9EED4",
-							},
+				},
+				properties: {
+					system: {
+						active: true,
+						connection: this.connectionId,
+						subscription: {
+							changeTypes: ["everything"],
+							id: "9042513B-D0CF-48F6-AF40-AD83B3C9EED4",
 						},
 					},
 				},
-			};
-		}
+			},
+		};
 
 		this.xbox.sessionDirectory.session(
-			modRequest,
+			this.multiplayerSessionRequest,
 			this.serviceConfigId,
 			this.sessionTemplateName,
 			this.sessionName,
@@ -1177,7 +1168,7 @@ class RTAMultiplayerSession extends EventEmitter {
 			this.serviceConfigId,
 			this.sessionTemplateName,
 			this.sessionName,
-			res => {
+			() => {
 				xbox.sessionDirectory.setActivity(
 					{
 						scid: this.serviceConfigId,
@@ -1468,10 +1459,10 @@ interface MinecraftLobbyCustomProperties {
 	protocol: number;
 	version: string;
 }
+
 //TODO add events to the social class the emits friendAdded on response so there is no duplicateEvents same for other events. also clean up the code for the xbox live client so it returns the values instead of a response
 class Session extends EventEmitter {
 	public xboxAccounts: Map<string, XboxLiveClient> = new Map();
-
 	public hostAccount: XboxLiveClient;
 
 	#sessionInstance: RTAMultiplayerSession;
@@ -1550,7 +1541,6 @@ class Session extends EventEmitter {
 				this.setFriendInterval(this.xboxAccounts.values());
 
 			if (this.xboxAccounts.size != 1) {
-				this.duplicateFriendCheck();
 				setInterval(() => {
 					if (!this.doingAutoFriendInterval)
 						try {
@@ -1708,12 +1698,10 @@ class Session extends EventEmitter {
 							let friendsList: SocialTypes.PeopleList =
 								JSON.parse(friends);
 							friendXuids.set(account.token.userXUID, new Set());
-							if (
-								friendsList.totalCount != 1000 &&
-								!this.fullOfFriends.has(account.token.userXUID)
-							)
+							if (friendsList.totalCount == 1000) {
 								this.fullOfFriends.add(account.token.userXUID);
-							else if (
+								return;
+							} else if (
 								this.fullOfFriends.has(account.token.userXUID)
 							) {
 								this.fullOfFriends.delete(
@@ -1789,6 +1777,7 @@ class Session extends EventEmitter {
 						}
 					}
 				}
+
 				this.doingDuplicateFriendCheck = false;
 				if (callback) callback();
 			}
@@ -1890,93 +1879,105 @@ class Session extends EventEmitter {
 	}
 
 	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
-		setInterval(() => {
-			for (let account of accounts) {
-				if (!(this.fullOfFriends.has(account.token.userXUID) || account.isTokenRefreshing || this.doingDuplicateFriendCheck)) {
+		for (let account of accounts) {
+			setInterval(() => {
+				if (
+					!this.fullOfFriends.has(account.token.userXUID) && // maybe error
+					!this.doingDuplicateFriendCheck &&
+					!account.isTokenRefreshing
+				) {
 					this.doingAutoFriendInterval = true;
-				if (this.additionalOptions.log)
-					console.log(
-						`[FriendConnect ${account.email}] AutoFriend Interval`
-					);
-				let req = request(
-					"https://peoplehub.xboxlive.com/users/me/people/followers",
-					{
-						method: "GET",
-						headers: {
-							Authorization: account.tokenHeader,
-							"x-xbl-contract-version": 5,
-							"Accept-Language": "en-us",
+					if (this.additionalOptions.log)
+						console.log(
+							`[FriendConnect ${account.email}] AutoFriend Interval`
+						);
+					let req = request(
+						"https://peoplehub.xboxlive.com/users/me/people/followers",
+						{
+							method: "GET",
+							headers: {
+								Authorization: account.tokenHeader,
+								"x-xbl-contract-version": 5,
+								"Accept-Language": "en-us",
+							},
 						},
-					},
-					res => {
-						//console.log(res.statusCode, res.statusMessage);
-						var body = "";
-						res.on("data", chunk => {
-							body += chunk;
-						});
+						res => {
+							//console.log(res.statusCode, res.statusMessage);
+							var body = "";
+							res.on("data", chunk => {
+								body += chunk;
+							});
 
-						res.on("end", () => {
-							try {
-								let data: PeopleHubTypes.PeopleList =
-									JSON.parse(body);
-								if (this.additionalOptions.log)
-									console.log(
-										`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
-									);
+							res.on("end", () => {
+								//it does not re do the interval
+								try {
+									let data: PeopleHubTypes.PeopleList =
+										JSON.parse(body);
+									if (this.additionalOptions.log)
+										console.log(
+											`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
+										);
 
-								for (let person of data.people) {
-									if (person.isFollowingCaller) {
-										if (
-											!person.isFollowedByCaller &&
-											!this.#friendXuids.has(person.xuid)
-										) {
-											account.social.addFriend(
-												person.xuid
-											); 
-											if (this.additionalOptions.log)
-												console.log(
-													`[FriendConnect ${account.email}] Added Friend ${person.gamertag}`
+
+									for (let person of data.people) {
+										if (person.isFollowingCaller) {
+											if (
+												!person.isFollowedByCaller &&
+												!this.#friendXuids.has(
+													person.xuid
+												)
+											) {
+												account.social.addFriend(
+													person.xuid
 												);
-											this.#friendXuids.add(person.xuid);
-											this.emit("friendAdded", {
-												account,
-												person: person.xuid,
-											});
+
+												if (this.additionalOptions.log)
+													console.log(
+														`[FriendConnect ${account.email}] Added Friend ${person.gamertag}`
+													);
+												this.#friendXuids.add(
+													person.xuid
+												);
+												this.emit("friendAdded", {
+													account,
+													person: person.xuid,
+												});
+											}
 										}
 									}
+									this.doingAutoFriendInterval = false;
+								} catch (error) {
+									this.errorHandling(
+										error,
+										account.email,
+										"AutoFriend Interval"
+									);
+									this.doingAutoFriendInterval = false;
 								}
-								this.doingAutoFriendInterval = false;
-							} catch (error) {
+							});
+
+							res.on("error", error => {
 								this.errorHandling(
 									error,
 									account.email,
 									"AutoFriend Interval"
 								);
 								this.doingAutoFriendInterval = false;
-							}
-						});
-
-						res.on("error", error => {
-							this.errorHandling(
-								error,
-								account.email,
-								"AutoFriend Interval"
-							);
-							this.doingAutoFriendInterval = false;
-						});
-					}
-				);
-				req.on("error", error => {
-					this.errorHandling(
-						error,
-						account.email,
-						"AutoFriend Interval"
+							});
+						}
 					);
-					this.doingAutoFriendInterval = false;
-				});
-				req.end();
-			}
-		}, 15000);
+					req.on("error", error => {
+						this.errorHandling(
+							error,
+							account.email,
+							"AutoFriend Interval"
+						);
+						this.doingAutoFriendInterval = false;
+					});
+					req.end();
+				}
+			}, 15000);
+		}
 	}
 	doingAutoFriendInterval: boolean;
 	async getAdvertisement(): Promise<void> {
