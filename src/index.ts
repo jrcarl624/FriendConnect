@@ -1918,6 +1918,7 @@ class Session extends EventEmitter {
 											`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
 										);
 
+
 									for (let person of data.people) {
 										if (person.isFollowingCaller) {
 											if (
