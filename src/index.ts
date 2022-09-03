@@ -84,9 +84,7 @@ const request = (
 
 const setQueries = (url: string, queries: Record<string, any>) => {
 	url += "?";
-
 	for (let i in queries) url += `${i}=${queries[i]}&`;
-
 	return url.slice(url.lastIndexOf("&"), url.lastIndexOf("&"));
 };
 
@@ -873,6 +871,34 @@ class SessionDirectory {
 			callback
 		).end();
 	}
+	deleteHandle(handleId: string, callback?: ResponseCallback): ClientRequest {
+		return request(
+			`${this.uri}/handles/${handleId}`,
+			{
+				method: "DELETE",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
+	getHandle(handleId: string, callback?: ResponseCallback): ClientRequest {
+		return request(
+			`${this.uri}/handles/${handleId}`,
+			{
+				method: "GET",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: this.xbox.tokenHeader,
+					"x-xbl-contract-version": 107,
+				},
+			},
+			callback
+		).end();
+	}
 }
 
 export namespace PeopleHubTypes {
@@ -977,8 +1003,7 @@ class PeopleHub {
 class RTAMultiplayerSession extends EventEmitter {
 	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "wss://rta.xboxlive.com";
-	readonly sessionName: string;
-	private firstConnectionId: boolean = true;
+	protected sessionName: string;
 	protected connectionId: string;
 	readonly sessionTemplateName: string;
 	protected websocketConnected: boolean = false;
@@ -1003,7 +1028,6 @@ class RTAMultiplayerSession extends EventEmitter {
 	) {
 		super();
 		this.updateSessionCallback = updateSessionCallback;
-		this.sessionName = crypto.randomUUID();
 		this.multiplayerSessionRequest = multiplayerSessionRequest;
 		this.serviceConfigId = serviceConfigId;
 		this.sessionTemplateName = sessionTemplateName;
@@ -1021,6 +1045,7 @@ class RTAMultiplayerSession extends EventEmitter {
 	}
 
 	private start() {
+		this.sessionName = crypto.randomUUID();
 		if (this.websocketConnected) return void 0;
 		if (this.startTimes >= 5) {
 			fs.unlinkSync(
@@ -1068,7 +1093,6 @@ class RTAMultiplayerSession extends EventEmitter {
 						this.connectionId = JSON.parse(
 							event.data
 						)[4].ConnectionId;
-						this.firstConnectionId = false;
 						//debug("connectionId: " + this.connectionId);
 						this.updateSession();
 					}
@@ -1917,8 +1941,6 @@ class Session extends EventEmitter {
 										console.log(
 											`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
 										);
-
-
 									for (let person of data.people) {
 										if (person.isFollowingCaller) {
 											if (
@@ -2040,16 +2062,14 @@ class Session extends EventEmitter {
 				error.stack
 			);
 
-			if (!fs.existsSync("./friend-connect.log")) {
+			if (!fs.existsSync("./friend-connect-error.log")) {
 				fs.writeFileSync(
-					"./friend-connect.log",
+					"./friend-connect-error.log",
 					"If restarting does not fix your error, submit this file in an github issue. https://github.com/minerj101/FriendConnect.\n-------------------------------------------------------\n",
 					"utf8"
 				);
 			}
-
 			let message: string;
-
 			message = `\n[${Date.now()}] ${source} Error:\n
 		Name: ${error.name}\n
 		Message: ${error.message}\n
