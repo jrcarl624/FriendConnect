@@ -128,17 +128,6 @@ interface XboxLiveToken {
 	expiresOn: number;
 }
 
-interface VerifyStringResult {
-	verifyStringResult: { resultCode: `${number}`; offendingString: string }[];
-}
-
-const VerifyStringResultCodes = {
-	0: "Success",
-	1: "Offensive string",
-	2: "String too long",
-	3: "Unknown error",
-};
-
 export namespace SocialTypes {
 	export interface PeopleList {
 		people: Person[];
@@ -179,10 +168,6 @@ export namespace SocialTypes {
 		recentChangeCount: number;
 		watermark: string;
 	}
-}
-
-interface XuidList {
-	xuids: string[];
 }
 
 const joinChunks = (res: IncomingMessage, callback: (body: string) => void) => {
@@ -1003,16 +988,19 @@ class PeopleHub {
 class RTAMultiplayerSession extends EventEmitter {
 	private readonly xbox: XboxLiveClient;
 	readonly uri: string = "wss://rta.xboxlive.com";
-	protected sessionName: string;
+	get sessionName() {
+		return this.#sessionName;
+	}
+	#sessionName: string;
 	protected connectionId: string;
 	readonly sessionTemplateName: string;
 	protected websocketConnected: boolean = false;
 	readonly serviceConfigId: string;
 	protected startTimes: number = 0;
 	multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest;
-
+	members: Set<XboxLiveClient> = new Set<XboxLiveClient>();
 	functionsToRunOnSessionUpdate: Set<() => void> = new Set();
-
+	autoRestart: boolean;
 	firstStartSignaled: boolean = false;
 	private readonly updateSessionCallback: (
 		rtaMultiplayerSession: RTAMultiplayerSession
@@ -1022,6 +1010,7 @@ class RTAMultiplayerSession extends EventEmitter {
 		multiplayerSessionRequest: SessionDirectoryTypes.MultiplayerSessionRequest,
 		serviceConfigId: string,
 		sessionTemplateName: string,
+		autoRestart: boolean,
 		updateSessionCallback: (
 			rtaMultiplayerSession: RTAMultiplayerSession
 		) => void
@@ -1032,6 +1021,9 @@ class RTAMultiplayerSession extends EventEmitter {
 		this.serviceConfigId = serviceConfigId;
 		this.sessionTemplateName = sessionTemplateName;
 		this.xbox = xbox;
+
+		if (autoRestart) this.autoRestart = true;
+
 		setInterval(() => {
 			if (this.websocketConnected && !this.xbox.isTokenRefreshing)
 				for (let i of this.functionsToRunOnSessionUpdate) {
@@ -1045,8 +1037,8 @@ class RTAMultiplayerSession extends EventEmitter {
 	}
 
 	private start() {
-		this.sessionName = crypto.randomUUID();
 		if (this.websocketConnected) return void 0;
+
 		if (this.startTimes >= 5) {
 			fs.unlinkSync(
 				`${this.xbox.authPath}/${this.xbox.emailHash}_xbl-cache.json`
@@ -1061,7 +1053,7 @@ class RTAMultiplayerSession extends EventEmitter {
 				});
 			}, 29000);
 		}
-
+		this.#sessionName = crypto.randomUUID();
 		this.startTimes++;
 		const ws = new W3CWebSocket(
 			`${this.uri}/connect`,
@@ -1071,6 +1063,7 @@ class RTAMultiplayerSession extends EventEmitter {
 				Authorization: this.xbox.tokenHeader,
 			}
 		);
+
 		ws.onerror = (error: Error) => {
 			this.websocketConnected = false;
 			this.emit("error", error);
@@ -1079,11 +1072,14 @@ class RTAMultiplayerSession extends EventEmitter {
 			ws.send(
 				'[1,1,"https://sessiondirectory.xboxlive.com/connections/"]'
 			);
+
 			this.websocketConnected = true;
+			if (this.autoRestart) this.start();
 			this.emit("open");
 		};
 		ws.onclose = (event: ICloseEvent) => {
 			this.websocketConnected = false;
+			if (this.autoRestart) this.start();
 			this.emit("close", event);
 		};
 		ws.onmessage = (event: IMessageEvent) => {
@@ -1101,7 +1097,6 @@ class RTAMultiplayerSession extends EventEmitter {
 			}
 		};
 	}
-	firstSession: boolean = true;
 	updateSession() {
 		//debug("updateSession called");
 		if (this.updateSessionCallback) this.updateSessionCallback(this);
@@ -1132,7 +1127,7 @@ class RTAMultiplayerSession extends EventEmitter {
 			this.multiplayerSessionRequest,
 			this.serviceConfigId,
 			this.sessionTemplateName,
-			this.sessionName,
+			this.#sessionName,
 			res => {
 				res.on("data", data => {
 					//debug("updateSessionCallback called");
@@ -1142,7 +1137,7 @@ class RTAMultiplayerSession extends EventEmitter {
 							{
 								scid: this.serviceConfigId,
 								templateName: this.sessionTemplateName,
-								name: this.sessionName,
+								name: this.#sessionName,
 							},
 							res => {
 								res.on("data", data => {
@@ -1158,11 +1153,12 @@ class RTAMultiplayerSession extends EventEmitter {
 
 	join(xbox: XboxLiveClient) {
 		this.functionsToRunOnSessionUpdate.add(() => {
-			xbox.sessionDirectory.sessionKeepAlivePacket(
-				this.serviceConfigId,
-				this.sessionTemplateName,
-				this.sessionName
-			);
+			if (this.websocketConnected)
+				xbox.sessionDirectory.sessionKeepAlivePacket(
+					this.serviceConfigId,
+					this.sessionTemplateName,
+					this.#sessionName
+				);
 		});
 
 		xbox.sessionDirectory.session(
@@ -1191,13 +1187,13 @@ class RTAMultiplayerSession extends EventEmitter {
 			},
 			this.serviceConfigId,
 			this.sessionTemplateName,
-			this.sessionName,
+			this.#sessionName,
 			() => {
 				xbox.sessionDirectory.setActivity(
 					{
 						scid: this.serviceConfigId,
 						templateName: this.sessionTemplateName,
-						name: this.sessionName,
+						name: this.#sessionName,
 					},
 					res => {
 						res.on("data", data => {
@@ -1217,6 +1213,60 @@ interface MsaResponse {
 	interval: number;
 	message: string;
 }
+
+namespace MultiplayerActivityTypes {}
+
+class MultiplayerActivity {
+	readonly xbox: XboxLiveClient;
+	uri: "multiplayeractivity.xboxlive.com" =
+		"multiplayeractivity.xboxlive.com";
+	constructor(xbox: XboxLiveClient) {
+		this.xbox = xbox;
+	}
+
+	/**
+	 * Sets or updates the activity for a user playing a specific title. This API allows a game client or server to set/update the multiplayer activity for a user playing a particular title. The activity must be set as soon as the user is active in a multiplayer activity. Xbox Live users will be able to subscribe to changes in activity for other users (generally friends) and these updates will be pushed to the Xbox clients via RTA.
+	 *  @url https://docs.microsoft.com/en-us/gaming/gdk/_content/gc/reference/live/rest/uri/multiplayeractivity/swagger-uris/uri-updateactivity
+	 */
+	setActivity(titleId: string, xuid: string, callback: ResponseCallback) {
+		return request(
+			``,
+			{
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+					"Content-Type": "string",
+				},
+			},
+			callback
+		);
+	}
+	getActivity(titleId: string, xuid: string, callback: ResponseCallback) {
+		return request(
+			``,
+			{
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+					"Content-Type": "string",
+				},
+			},
+			callback
+		);
+	}
+
+	deleteActivity(titleId: string, xuid: string, callback: ResponseCallback) {
+		return request(
+			``,
+			{
+				headers: {
+					Authorization: this.xbox.tokenHeader,
+					"Content-Type": "string",
+				},
+			},
+			callback
+		);
+	}
+}
+
 export class XboxLiveClient extends EventEmitter {
 	token: XboxLiveToken;
 	#isTokenRefreshing: boolean = true;
@@ -1509,6 +1559,7 @@ class Session extends EventEmitter {
 
 	#accountsInitialized: number = 0;
 	#accountsWithNoAchievements: number = 0;
+	started: boolean = false;
 	constructor(options: FriendConnectSessionInfoOptions) {
 		super();
 
@@ -1538,6 +1589,7 @@ class Session extends EventEmitter {
 		if (options.autoFriending) this.additionalOptions.autoFriending = true;
 		this.additionalOptions.constants =
 			options.constants || ({} as SessionOptionsConstants);
+		this.getAdvertisement();
 
 		if (!/.[\/]?[a-zA-Z0-9]+[\/]?/.test(options.tokenPath))
 			throw new Error("`tokenPath` is invalid, use ./auth/ for example");
@@ -1561,6 +1613,7 @@ class Session extends EventEmitter {
 		});
 
 		this.on("gotFriends?", () => {
+			if (this.#sessionInstance) return void 0;
 			if (this.additionalOptions.autoFriending)
 				this.setFriendInterval(this.xboxAccounts.values());
 
@@ -1578,6 +1631,7 @@ class Session extends EventEmitter {
 						}
 				}, 1800000);
 			}
+
 			for (const i of this.xboxAccounts.values()) {
 				if (!this.hostAccount) this.hostAccount = i;
 				for (let j of this.xboxAccounts.values()) {
@@ -1613,79 +1667,88 @@ class Session extends EventEmitter {
 				if (this.additionalOptions.pingServerForInfo)
 					this.getAdvertisement();
 			}, 15000);
-			this.createSessionRequest().then(request => {
-				//debug(request);
-				this.#sessionInstance = new RTAMultiplayerSession(
-					this.hostAccount,
-					//@ts-ignore
-					request,
-					Constants.SERVICE_CONFIG_ID,
-					"MinecraftLobby",
-					session => {
-						session.multiplayerSessionRequest.properties.custom =
-							this.minecraftLobbyCustomOptions;
-					}
+			//debug(request);
+			this.#sessionInstance = new RTAMultiplayerSession(
+				this.hostAccount,
+				//@ts-ignore
+				{
+					properties: {
+						system: {
+							joinRestriction: "followed",
+							readRestriction: "followed",
+							closed: false,
+						},
+						custom: this.minecraftLobbyCustomOptions,
+					},
+				},
+				Constants.SERVICE_CONFIG_ID,
+				"MinecraftLobby",
+				true,
+				session => {
+					session.multiplayerSessionRequest.properties.custom =
+						this.minecraftLobbyCustomOptions;
+				}
+			);
+
+			this.#sessionInstance.on("message", (event: IMessageEvent) => {
+				log(event);
+			});
+
+			this.#sessionInstance.on("open", () => {
+				log("Connected to RTA Websocket");
+				this.started = true;
+			});
+			this.#sessionInstance.on("close", (event: ICloseEvent) => {
+				log(event.code);
+				log(event.reason);
+				log(event.wasClean);
+				log("Restarting...");
+				this.started = false;
+			});
+			this.#sessionInstance.on("error", (error: Error) => {
+				this.errorHandling(
+					error,
+					this.hostAccount.email,
+					"RTA Websocket"
 				);
+				log("Restarting...");
+				this.started = false;
+			});
 
-				this.#sessionInstance.on("message", (event: IMessageEvent) => {
-					log(event);
-				});
-
-				this.#sessionInstance.on("open", () => {
-					log("Connected to RTA Websocket");
-				});
-				this.#sessionInstance.on("close", (event: ICloseEvent) => {
-					log(event.code);
-					log(event.reason);
-					log(event.wasClean);
-					log("Restarting...");
-				});
-				this.#sessionInstance.on("error", (error: Error) => {
-					this.errorHandling(
-						error,
-						this.hostAccount.email,
-						"RTA Websocket"
-					);
-					log("Restarting...");
-				});
-
-				let firstResponse = true;
-				this.#sessionInstance.on("sessionResponse", session => {
-					if (firstResponse) {
-						for (let i of this.xboxAccounts.values()) {
-							if (i == this.hostAccount) continue;
-							this.#sessionInstance.join(i);
-							firstResponse = false;
-						}
+			let firstResponse = true;
+			this.#sessionInstance.on("sessionResponse", session => {
+				if (firstResponse) {
+					for (let i of this.xboxAccounts.values()) {
+						if (i == this.hostAccount) continue;
+						this.#sessionInstance.join(i);
+						firstResponse = false;
 					}
-					session = JSON.parse(session);
+				}
+				session = JSON.parse(session);
 
-					if (Object.keys(session.members).length > 35) {
-						for (let i in session.members) {
-							let member = session.members[i];
-							console.log(session.members[i]);
-							if (
-								this.#accountXuids.has(
-									session.members[i].constants.system.xuid
-								)
+				if (Object.keys(session.members).length > 35) {
+					for (let i in session.members) {
+						let member = session.members[i];
+						console.log(session.members[i]);
+						if (
+							this.#accountXuids.has(
+								session.members[i].constants.system.xuid
 							)
-								continue;
+						)
+							continue;
 
-							if (
-								Date.now() +
-									300000 -
-									Date.parse(member.joinTime) <
-								0
-							)
-								this.hostAccount.sessionDirectory.removeMember(
-									this.#sessionInstance.serviceConfigId,
-									this.#sessionInstance.sessionTemplateName,
-									this.#sessionInstance.sessionName,
-									parseInt(i)
-								);
-						}
+						if (
+							Date.now() + 300000 - Date.parse(member.joinTime) <
+							0
+						)
+							this.hostAccount.sessionDirectory.removeMember(
+								this.#sessionInstance.serviceConfigId,
+								this.#sessionInstance.sessionTemplateName,
+								this.#sessionInstance.sessionName,
+								parseInt(i)
+							);
 					}
-				});
+				}
 			});
 		});
 	}
@@ -1724,7 +1787,7 @@ class Session extends EventEmitter {
 							friendXuids.set(account.token.userXUID, new Set());
 							if (friendsList.totalCount == 1000) {
 								this.fullOfFriends.add(account.token.userXUID);
-								return;
+								return void 0;
 							} else if (
 								this.fullOfFriends.has(account.token.userXUID)
 							) {
@@ -2032,24 +2095,6 @@ class Session extends EventEmitter {
 		}
 	}
 
-	async createSessionRequest() {
-		if (this.additionalOptions.log)
-			console.log("[FriendConnect] Creating Session Request");
-		try {
-			if (this.additionalOptions.pingServerForInfo)
-				this.getAdvertisement();
-		} catch (e) {}
-		return {
-			properties: {
-				system: {
-					joinRestriction: "followed",
-					readRestriction: "followed",
-					closed: false,
-				},
-				custom: this.minecraftLobbyCustomOptions,
-			},
-		};
-	}
 	errorHandling(error: Error, email: string, source: string) {
 		if (this.additionalOptions.log) {
 			console.error(
