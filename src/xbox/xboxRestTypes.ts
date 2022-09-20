@@ -1747,6 +1747,48 @@ export interface MultiplayerSessionRequest {
 		} | null;
 	};
 }
+export interface MultiplayerSession {
+	properties: {
+		system: {
+			turn: [];
+			[key: string]: any;
+		};
+		custom: {
+			[key: string]: any;
+		};
+	};
+	constants: {
+		system: {
+			visibility: string;
+			[key: string]: any;
+		};
+		custom: { [key: string]: any };
+	};
+	servers: {};
+	members: {
+		first: number;
+		end: number;
+		count: number;
+		accepted: number;
+		[key: `${number}`]: {
+			next: 1;
+			pending: true;
+			properties: {
+				system: { [key: string]: any };
+				custom: { [key: string]: any };
+			};
+			constants: {
+				system: {
+					xuid: string;
+				};
+				custom: {
+					[key: string]: any;
+				};
+			};
+		};
+	};
+	key: string;
+}
 /**
  * A JSON object representing the Microsoft.Xbox.Services.Multiplayer.MultiplayerActivityDetails.
  * @note This object is implemented by the 2015 Multiplayer and applies only to that multiplayer version and later. It is intended for use with template contract 104/105 or later.

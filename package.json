@@ -1,17 +1,17 @@
 {
   "name": "friend-connect",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "",
   "main": "./dist/index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "node --es-module-specifier-resolution=node ./test/index.js",
+    "test": "node --es-module-specifier-resolution=node --experimental-fetch ./test/index.js",
     "test-n-build": "npm run build && npm run test",
     "publish": "npm run build && npm publish --access public "
   },
   "author": "minerj101",
-  "license": "GLPv3",
+  "license": "MIT",
   "dependencies": {
     "bedrock-protocol": "^3.18.0",
     "dotenv": "^16.0.1",
