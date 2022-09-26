@@ -1633,7 +1633,6 @@ export interface UserTitle {
 	 * 	ID of the primary service config set associated with the title.
 	 */
 	serviceConfigId: string;
-
 	titleType: string;
 	/**
 	 * The supported platform.

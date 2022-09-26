@@ -1,28 +1,17 @@
 import crypto from "crypto";
 import { EventEmitter } from "events";
 import fs from "fs";
-import https, { RequestOptions } from "https";
-import {
-	ping,
-	createServer,
-	ServerAdvertisement,
-	Client,
-	Server,
-} from "bedrock-protocol";
+import { ping } from "bedrock-protocol";
 
-import * as xboxRestTypes from "./xbox/xboxRestTypes";
 import authPkg from "prismarine-auth";
 
 const { Titles } = authPkg;
-import wsPkg, { ICloseEvent, IMessageEvent } from "websocket";
+import { ICloseEvent, IMessageEvent } from "websocket";
 
 import { config } from "dotenv";
-import { ClientRequest, IncomingMessage } from "http";
-import * as XboxRestTypes from "./xbox/xboxRestTypes";
 config();
 const Constants = {
 	SERVICE_CONFIG_ID: "4fc10100-5f7a-4470-899b-280835760c07", // The service config ID for Minecraft
-	LIVE_TOKEN_REQUEST: "https://login.live.com/oauth20_token.srf",
 	CLIENT_ID: "00000000441cc96b", // Nintendo Switch Title ID
 };
 
@@ -145,12 +134,14 @@ interface MinecraftLobbyCustomProperties {
 	protocol: number;
 	version: string;
 }
-import { XboxLiveClient, RTAMultiplayerSession, PeopleHubTypes } from "./xbox";
+import { XboxClient, LinkCodeTokenProvider } from "./xbox";
+import { RTAMultiplayerSession } from "./xbox/modules/rta";
+import { PeopleList } from "./xbox/modules/peopleHub";
+
 //TODO add events to the social class the emits friendAdded on response so there is no duplicateEvents same for other events. also clean up the code for the xbox live client so it returns the values instead of a response
 class Session extends EventEmitter {
-	public xboxAccounts: Map<string, XboxLiveClient> = new Map();
-	public hostAccount: XboxLiveClient;
-
+	public xboxAccounts: Map<string, XboxClient> = new Map();
+	public hostAccount: XboxClient;
 	#sessionInstance: RTAMultiplayerSession;
 	get sessionInstance(): RTAMultiplayerSession {
 		return this.#sessionInstance;
@@ -160,18 +151,19 @@ class Session extends EventEmitter {
 	get friendXuids(): IterableIterator<string> {
 		return this.#friendXuids.values();
 	}
-
 	public additionalOptions: AdditionalSessionOptions = {};
 	#accountXuids: Set<string> = new Set();
-
 	get accountXuids(): IterableIterator<string> {
 		return this.#accountXuids.values();
 	}
 	public fullOfFriends: Set<string> = new Set();
-
 	#accountsInitialized: number = 0;
 	#accountsWithNoAchievements: number = 0;
 	started: boolean = false;
+	doingDuplicateFriendCheck: boolean;
+	doingAutoFriendInterval: boolean;
+	#ip: string;
+	#port: number;
 	constructor(options: FriendConnectSessionInfoOptions) {
 		super();
 
@@ -247,11 +239,11 @@ class Session extends EventEmitter {
 			for (const i of this.xboxAccounts.values()) {
 				if (!this.hostAccount) this.hostAccount = i;
 				for (let j of this.xboxAccounts.values()) {
-					debug(i.email, j.email);
+					//debug(i.email, j.email);
 					if (i != j)
-						i.social.addFriend(j.token.userXUID).then(async res => {
+						i.social.addFriend(j.token.userXuid).then(async res => {
 							debug(res.status);
-							this.#friendXuids.add(j.token.userXUID);
+							this.#friendXuids.add(j.token.userXuid);
 							debug(await res.text());
 						});
 				}
@@ -260,7 +252,7 @@ class Session extends EventEmitter {
 			const log = (...message: any[]) => {
 				if (this.additionalOptions.log)
 					console.log(
-						`[FriendConnect ${this.hostAccount.email}]`,
+						`[FriendConnect ${this.hostAccount.xuid}]`,
 						...message,
 						"\n"
 					);
@@ -318,7 +310,7 @@ class Session extends EventEmitter {
 			this.#sessionInstance.on("error", (error: Error) => {
 				this.errorHandling(
 					error,
-					this.hostAccount.email,
+					this.hostAccount.xuid,
 					"RTA Websocket"
 				);
 				log("Restarting...");
@@ -362,8 +354,6 @@ class Session extends EventEmitter {
 		});
 	}
 
-	doingDuplicateFriendCheck: boolean;
-
 	duplicateFriendCheck(callback?: () => void) {
 		this.doingDuplicateFriendCheck = true;
 		let friendsGot = 0;
@@ -372,64 +362,38 @@ class Session extends EventEmitter {
 		for (let account of this.xboxAccounts.values()) {
 			if (this.additionalOptions.log)
 				console.log(
-					`[FriendConnect ${account.email}] Duplicate Friend Check Interval`
+					`[FriendConnect ${account.xuid}] Duplicate Friend Check Interval`
 				);
-			this.#accountXuids.add(account.token.userXUID);
-			https
-				.request(
-					`https://social.xboxlive.com/users/me/people`,
-					{
-						method: "GET",
-						headers: {
-							Authorization: account.tokenHeader,
-						},
-					},
-					res => {
-						let friends = "";
-						res.on("data", data => {
-							friends += data;
-						});
+			this.#accountXuids.add(account.xuid);
+			account.social.getFriends().then(friendsList => {
+				friendXuids.set(account.xuid, new Set());
+				if (friendsList.totalCount == 1000) {
+					this.fullOfFriends.add(account.xuid);
+					return void 0;
+				} else if (this.fullOfFriends.has(account.xuid)) {
+					this.fullOfFriends.delete(account.xuid);
+				}
+				for (let person of friendsList.people) {
+					if (!person.isFollowingCaller) {
+						account.social.removeFriend(person.xuid);
+						this.#friendXuids.delete(person.xuid);
 
-						res.on("end", () => {
-							let friendsList: XboxRestTypes.PeopleList =
-								JSON.parse(friends);
-							friendXuids.set(account.token.userXUID, new Set());
-							if (friendsList.totalCount == 1000) {
-								this.fullOfFriends.add(account.token.userXUID);
-								return void 0;
-							} else if (
-								this.fullOfFriends.has(account.token.userXUID)
-							) {
-								this.fullOfFriends.delete(
-									account.token.userXUID
-								);
-							}
-							for (let person of friendsList.people) {
-								if (!person.isFollowingCaller) {
-									account.social.removeFriend(person.xuid);
-									this.#friendXuids.delete(person.xuid);
-
-									if (this.additionalOptions.log)
-										console.log(
-											`[FriendConnect ${account.email}] Removed Friend ${person.xuid}`
-										);
-									this.emit("friendRemoved", {
-										account,
-										xuid: person.xuid,
-									});
-								} else {
-									friendXuids
-										.get(account.token.userXUID)
-										.add(person.xuid);
-									this.#friendXuids.add(person.xuid);
-								}
-							}
-							friendsGot++;
-							this.emit("doFriendCheck");
+						if (this.additionalOptions.log)
+							console.log(
+								`[FriendConnect ${account.xuid}] Removed Friend ${person.xuid}`
+							);
+						this.emit("friendRemoved", {
+							account,
+							xuid: person.xuid,
 						});
+					} else {
+						friendXuids.get(account.xuid).add(person.xuid);
+						this.#friendXuids.add(person.xuid);
 					}
-				)
-				.end();
+				}
+				friendsGot++;
+				this.emit("doFriendCheck");
+			});
 		} //xuid, Record<string,boolean>
 		this.on("doFriendCheck", () => {
 			let duplicateMap = new Map<string, Set<string>>();
@@ -464,7 +428,7 @@ class Session extends EventEmitter {
 							this.#friendXuids.delete(personXuid);
 
 							console.log(
-								`[FriendConnect ${account.email}] Removed Friend ${personXuid}`
+								`[FriendConnect ${account.xuid}] Removed Friend ${personXuid}`
 							);
 							this.emit("friendRemoved", {
 								account,
@@ -484,69 +448,69 @@ class Session extends EventEmitter {
 		this.#accountsInitialized = 0;
 		for (let email of accountEmails) {
 			//debug("Accounts initialized: " + this.accountsInitialized);
-			let xbox = new XboxLiveClient(email, tokenPath, {
+			let tokenProvider = new LinkCodeTokenProvider(email, tokenPath, {
 				authTitle: Titles.MinecraftNintendoSwitch,
 				deviceType: "Nintendo",
 			});
+
 			if (this.additionalOptions.log)
-				console.log(
-					`[FriendConnect ${xbox.email}] Initializing Account`
-				);
-			xbox.on("firstTokenAcquired", () => {
-				this.xboxAccounts.set(xbox.token.userXUID, xbox);
+				console.log(`[FriendConnect ${email}] Initializing Account`);
+
+			tokenProvider.on("firstTokenAcquired", () => {
+				let xbox = new XboxClient(tokenProvider);
+				this.xboxAccounts.set(xbox.xuid, xbox);
 				this.#accountsInitialized++;
 				if (this.additionalOptions.log)
 					console.log(
-						`[FriendConnect ${xbox.email}] Account Initialized`
+						`[FriendConnect ${xbox.xuid}] Account Initialized`
 					);
 				this.emit("accountInitialized");
 			});
 		}
 	}
-	checkAchievements(accounts: IterableIterator<XboxLiveClient>): void {
+	checkAchievements(accounts: IterableIterator<XboxClient>): void {
 		for (let account of accounts) {
 			if (this.additionalOptions.log)
 				console.log(
-					`[FriendConnect ${account.email}] Checking for Achievements`
+					`[FriendConnect ${account.xuid}] Checking for Achievements`
 				);
 
 			try {
 				account.achievements
-					.getAchievements(parseInt(account.token.userXUID))
+					.getAchievements(account.xuid)
 					.then(achievements => {
 						if (achievements.length === 0) {
 							if (this.additionalOptions.log)
 								console.log(
-									`[FriendConnect ${account.email}] Passed Achievement Check`
+									`[FriendConnect ${account.xuid}] Passed Achievement Check`
 								);
 							this.#accountsWithNoAchievements++;
 							this.emit("achievementChecked");
 						} else {
 							throw new Error(
-								`This account "${account.email}" has achievements, please use an alt account without achievements to protect your account.`
+								`This account "${account.xuid}" has achievements, please use an alt account without achievements to protect your account.`
 							);
 						}
 					});
 			} catch (error) {
 				this.errorHandling(
 					error,
-					account.email,
+					account.xuid,
 					"Checking for Achievements"
 				);
 			}
 		}
 	}
-	private ip: string;
-	private port: number;
+
 	createMinecraftLobbyCustomProperties(
-		xbox: XboxLiveClient,
+		xbox: XboxClient,
 		options: FriendConnectSessionInfoOptions
 	): MinecraftLobbyCustomProperties {
-		this.ip = options.ip;
-		this.port = options.port;
+		this.#ip = options.ip;
+		this.#port = options.port;
 
 		if (this.additionalOptions.log)
-			console.log(`[FriendConnect ${xbox.email}] Creating Session Info`);
+			console.log(`[FriendConnect ${xbox.xuid}] Creating Session Info`);
 		return {
 			BroadcastSetting: 3,
 			CrossPlayDisabled: false,
@@ -565,7 +529,7 @@ class Session extends EventEmitter {
 			],
 			TitleId: 0,
 			hostName: options.hostName,
-			ownerId: xbox.token.userXUID,
+			ownerId: xbox.xuid,
 			rakNetGUID: "",
 			worldName: options.worldName,
 			worldType: "Survival",
@@ -576,110 +540,87 @@ class Session extends EventEmitter {
 		};
 	}
 
-	setFriendInterval(accounts: IterableIterator<XboxLiveClient>) {
+	setFriendInterval(accounts: IterableIterator<XboxClient>) {
 		for (let account of accounts) {
 			setInterval(() => {
 				if (
-					!this.fullOfFriends.has(account.token.userXUID) && // maybe error
+					!this.fullOfFriends.has(account.xuid) && // maybe error
 					!this.doingDuplicateFriendCheck &&
-					!account.isTokenRefreshing
+					!account.token.isRefreshing
 				) {
 					this.doingAutoFriendInterval = true;
 					if (this.additionalOptions.log)
 						console.log(
-							`[FriendConnect ${account.email}] AutoFriend Interval`
+							`[FriendConnect ${account.xuid}] AutoFriend Interval`
 						);
-					let req = request(
+					let req = fetch(
 						"https://peoplehub.xboxlive.com/users/me/people/followers",
 						{
 							method: "GET",
 							headers: {
-								Authorization: account.tokenHeader,
-								"x-xbl-contract-version": 5,
+								Authorization: account.authorizationHeader,
+								"x-xbl-contract-version": "5",
 								"Accept-Language": "en-us",
 							},
-						},
-						res => {
+						}
+					)
+						.then(async res => {
 							//console.log(res.statusCode, res.statusMessage);
-							var body = "";
-							res.on("data", chunk => {
-								body += chunk;
-							});
+							const data: PeopleList = await res.json();
+							try {
+								if (this.additionalOptions.log)
+									console.log(
+										`[FriendConnect ${account.xuid}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
+									);
+								for (let person of data.people) {
+									if (person.isFollowingCaller) {
+										if (
+											!person.isFollowedByCaller &&
+											!this.#friendXuids.has(person.xuid)
+										) {
+											account.social.addFriend(
+												person.xuid
+											);
 
-							res.on("end", () => {
-								try {
-									let data: PeopleHubTypes.PeopleList =
-										JSON.parse(body);
-									if (this.additionalOptions.log)
-										console.log(
-											`[FriendConnect ${account.email}] ${data.people.length} profile(s) have this account friended.` //followed ${this.profileName}
-										);
-									for (let person of data.people) {
-										if (person.isFollowingCaller) {
-											if (
-												!person.isFollowedByCaller &&
-												!this.#friendXuids.has(
-													person.xuid
-												)
-											) {
-												account.social.addFriend(
-													person.xuid
+											if (this.additionalOptions.log)
+												console.log(
+													`[FriendConnect ${account.xuid}] Added Friend ${person.gamertag}`
 												);
-
-												if (this.additionalOptions.log)
-													console.log(
-														`[FriendConnect ${account.email}] Added Friend ${person.gamertag}`
-													);
-												this.#friendXuids.add(
-													person.xuid
-												);
-												this.emit("friendAdded", {
-													account,
-													person: person.xuid,
-												});
-											}
+											this.#friendXuids.add(person.xuid);
+											this.emit("friendAdded", {
+												account,
+												person: person.xuid,
+											});
 										}
 									}
-									this.doingAutoFriendInterval = false;
-								} catch (error) {
-									this.errorHandling(
-										error,
-										account.email,
-										"AutoFriend Interval"
-									);
-									this.doingAutoFriendInterval = false;
 								}
-							});
-
-							res.on("error", error => {
+								this.doingAutoFriendInterval = false;
+							} catch (error) {
 								this.errorHandling(
 									error,
-									account.email,
+									account.xuid,
 									"AutoFriend Interval"
 								);
 								this.doingAutoFriendInterval = false;
-							});
-						}
-					);
-					req.on("error", error => {
-						this.errorHandling(
-							error,
-							account.email,
-							"AutoFriend Interval"
-						);
-						this.doingAutoFriendInterval = false;
-					});
-					req.end();
+							}
+						})
+						.catch(error => {
+							this.errorHandling(
+								error,
+								account.xuid,
+								"AutoFriend Interval"
+							);
+							this.doingAutoFriendInterval = false;
+						});
 				}
 			}, 15000);
 		}
 	}
-	doingAutoFriendInterval: boolean;
 	async getAdvertisement(): Promise<void> {
 		try {
 			let info = await ping({
-				host: this.ip,
-				port: parseInt(`${this.port}`),
+				host: this.#ip,
+				port: parseInt(`${this.#port}`),
 			});
 			if (!this.additionalOptions.constants.gamemode)
 				this.minecraftLobbyCustomOptions.worldType = info.gamemode;
@@ -705,10 +646,10 @@ class Session extends EventEmitter {
 		}
 	}
 
-	errorHandling(error: Error, email: string, source: string) {
+	errorHandling(error: Error, xuid: string, source: string) {
 		if (this.additionalOptions.log) {
 			console.error(
-				`[FriendConnect ${email}] ${source} Error`,
+				`[FriendConnect ${xuid}] ${source} Error`,
 				"\nError Name: ",
 				error.name,
 				"\nError Message: ",
