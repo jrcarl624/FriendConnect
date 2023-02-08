@@ -76,7 +76,7 @@ _If you don't know what I am talking about, make a file called `package.json` an
 { "type": "module" }
 ```
 
-You can run the file with `node --es-module-specifier-resolution=node ./path/to/file.js`.
+You can run the file with `node --es-module-specifier-resolution=node  --experimental-fetch ./path/to/file.js`.
 
 ### Debug Info
 
