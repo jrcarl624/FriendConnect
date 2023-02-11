@@ -24,6 +24,9 @@ If you want to be notified when any changes occur to this project, you can join 
 [![A New Realms Replacement, A new method for joining servers on console.](https://res.cloudinary.com/marcomontalbano/image/upload/v1657258514/video_to_markdown/images/youtube--77qXotN9jGo-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/77qXotN9jGo "A New Realms Replacement, A new method for joining servers on console.")
 
 ## How to use it:
+If you use Pterodactyl Panel you can skip the installation in this part and instead refer to
+https://github.com/Androecia/FriendConnect-Pterodactyl for the official egg.
+You'll still want to read below so you understand what certain variables do and are as informed as possible.
 
 ```tty
 $ npm install friend-connect
