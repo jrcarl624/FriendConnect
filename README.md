@@ -14,6 +14,11 @@ This project is still in development, so please be patient if there are issues.
 
 The best way to use this tool at the moment is as a node module. Read the tutorial below for more information of how to set this up.
 
+## Feature Note
+
+This tool includes a lesser known fix that flushes the sessions once it hits 35 players. Another feature is efficient multi account management, this is achieved by having all of the accounts join the same session.
+
+
 ## Discord
 
 If you want to be notified when any changes occur to this project, you can join the discord server.<br>
@@ -24,10 +29,18 @@ If you want to be notified when any changes occur to this project, you can join 
 [![A New Realms Replacement, A new method for joining servers on console.](https://res.cloudinary.com/marcomontalbano/image/upload/v1657258514/video_to_markdown/images/youtube--77qXotN9jGo-c05b58ac6eb4c4700831b2b3070cd403.jpg)](https://youtu.be/77qXotN9jGo "A New Realms Replacement, A new method for joining servers on console.")
 
 ## How to use it:
-If you use Pterodactyl Panel you can skip the installation in this part and instead refer to
+
+### Standalone
+
+You can download this repository and edit the .env file to use this tool standalone. 
+
+### Pterodactyl 
+
+If you use Pterodactyl Panel you can refer to
 https://github.com/Androecia/FriendConnect-Pterodactyl for the official egg.
 You'll still want to read below so you understand what certain variables do and are as informed as possible.
 
+### As an NPM library
 ```tty
 $ npm install friend-connect
 ```
@@ -103,15 +116,53 @@ FRIEND_CONNECT_DEBUG=true
 
 ## Testing
 
-If you are contributing to this project, make a `.env` file in the root directory.
+If you are contributing to this project, edit the `.env` file in the root directory.
 This file is used in `./test/index.js` to test the tool.
 
 ```ini
-EMAIL="emails@example.com"
-EMAIL2="emails@example.com"
-IP="example.com"
+# The hostname of the server
+HOSTNAME=FriendConnect
+# The world name of the server
+WORLD_NAME=Message of the Day: Hello World
+# The version of the server
+VERSION=1.19.60
+# The protocol of the server
+PROTOCOL=465
+# The connected players of the server
+CONNECTED_PLAYERS=0
+# The max connected players of the server
+MAX_CONNECTED_PLAYERS=40
+# The ip of the server
+IP=tailvile.xyz
+# The port of the server
 PORT=19132
-#Uncomment this if you want to see extra debug information
+# The connection type of the server
+CONNECTION_TYPE=6
+# If you want to log the server
+LOG=false
+# The joinability of the server
+JOINABILITY=joinable_by_friends
+# If you want to auto friend people
+AUTO_FRIENDING=true
+# If you want to ping the server for info
+PING_SERVER_FOR_INFO=true
+# The accounts to use separated by a comma
+ACCOUNTS=
+# The constant world name
+CONSTANT_WORLD_NAME=false
+# The constant host name
+CONSTANT_HOST_NAME=false
+# The constant max connected players
+CONSTANT_MAX_CONNECTED_PLAYERS=false
+# The constant connected players
+CONSTANT_CONNECTED_PLAYERS=false
+# The constant protocol
+CONSTANT_PROTOCOL=false
+# The constant version
+CONSTANT_VERSION=false
+# The account limit
+ACC_LIMIT=1
+# If you want to debug messages
 #FRIEND_CONNECT_DEBUG=true
 ```
 
