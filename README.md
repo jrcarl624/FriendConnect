@@ -105,8 +105,7 @@ You can run the file with `node --es-module-specifier-resolution=node  --experim
 ### Debug Info
 
 If you want to see extra debug information.
-Add a file called `.env` and add the following contents to the file.
-
+Set this environment variable as seen below.
 ```ini
 FRIEND_CONNECT_DEBUG=true
 ```
