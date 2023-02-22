@@ -62,14 +62,14 @@ import { Session } from "friend-connect";
 new Session({
 	hostName: "Server Name", // The hostname of the server
 	worldName: "Message of the Day: Hello World", // Use as a MOTD
-	version: "1.19.21", // The version of the session, this can be any string.
+	version: "1.19.60", // The version of the session, this can be any string.
 
-	protocol: 545, //The protocol of the server you are connecting to.
+	protocol: 565, //The protocol of the server you are connecting to.
 
 	connectedPlayers: 0, // Used as a fallback if pinging the server fails.
 	maxConnectedPlayers: 40, // Used as a fallback if pinging the server fails.
 
-	ip: "example.com", // The ip of the server you are using.
+	ip: "tailvile.xyz", // The ip of the server you are using.
 	port: 19132, // The port of the server you are using.
 	connectionType: 6, // I don't recommend changing this.
 
