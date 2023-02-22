@@ -1,29 +1,165 @@
 import { Session } from "../dist/index.js";
-import { config } from "dotenv";
-config();
+
+
+// check if the env for port, ip, protocol, and accounts are set if not error
+if (!process.env.IP || !process.env.PROTOCOL || !process.env.ACCOUNTS) {
+	console.error("Please set the variables for IP, PROTOCOL, and ACCOUNTS");
+	process.exit(1);
+}
+
+let accounts = process.env.ACCOUNTS.split(",");
+
+
+let maxConnectedPlayers = 40;
+
+if (process.env.CONNECTED_PLAYERS) {
+	maxConnectedPlayers = parseInt(process.env.CONNECTED_PLAYERS);
+}
+
+let connectedPlayers = 0;
+
+if (process.env.MAX_CONNECTED_PLAYERS) {
+	connectedPlayers = parseInt(process.env.MAX_CONNECTED_PLAYERS);
+}
+
+let port = 19132;
+
+if (process.env.PORT) {
+	port = parseInt(process.env.PORT);
+}
+
+let connectionType = 6;
+
+if (process.env.CONNECTION_TYPE) {
+	connectionType = parseInt(process.env.CONNECTION_TYPE);
+}
+
+import fs from "fs";
+
+//@ts-ignore
+let package = JSON.parse(fs.readFileSync("./package.json").toString());
+
+let autoFriending = true;
+
+if (process.env.AUTO_FRIENDING) {
+	autoFriending = process.env.AUTO_FRIENDING === "true";
+}
+
+let pingServerForInfo = true;
+
+if (process.env.PING_SERVER_FOR_INFO) {
+	pingServerForInfo = process.env.PING_SERVER_FOR_INFO === "true";
+}
+
+let protocol = 0;
+
+if (process.env.PROTOCOL) {
+	protocol = parseInt(process.env.PROTOCOL);
+}
+let log = false;
+if (process.env.LOG) {
+	log = process.env.LOG === "true";
+}
+
+let constantWorldName = false;
+
+if (process.env.CONSTANT_WORLD_NAME) {
+	constantWorldName = process.env.CONSTANT_WORLD_NAME === "true";
+}
+
+let constantHostName = false;
+
+if (process.env.CONSTANT_HOST_NAME) {
+	constantHostName = process.env.CONSTANT_HOST_NAME === "true";
+}
+
+let constantMaxConnectedPlayers = false;
+
+if (process.env.CONSTANT_MAX_CONNECTED_PLAYERS) {
+	constantMaxConnectedPlayers =
+		process.env.CONSTANT_MAX_CONNECTED_PLAYERS === "true";
+}
+
+let constantConnectedPlayers = false;
+
+if (process.env.CONSTANT_CONNECTED_PLAYERS) {
+	constantConnectedPlayers =
+		process.env.CONSTANT_CONNECTED_PLAYERS === "true";
+}
+
+let constantProtocol = false;
+
+if (process.env.CONSTANT_PROTOCOL) {
+	constantProtocol = process.env.CONSTANT_PROTOCOL === "true";
+}
+
+let constantVersion = false;
+
+if (process.env.CONSTANT_VERSION) {
+	constantVersion = process.env.CONSTANT_VERSION === "true";
+}
+
+let constants = {
+	worldName: constantWorldName,
+
+	hostName: constantHostName,
+
+	maxConnectedPlayers: constantMaxConnectedPlayers,
+
+	connectedPlayers: constantConnectedPlayers,
+
+	protocol: constantProtocol,
+
+	version: constantVersion,
+};
+
+
+let accLimit = 1;
+
+if (process.env.ACC_LIMIT) {
+	accLimit = parseInt(process.env.ACC_LIMIT);
+
+
+	if (accLimit > accounts.length) {
+		console.error(
+			"Please remove one of your emails from the accounts variable."
+		);
+		process.exit(1);
+	}
+}
+
+
+for (let i of accounts) {
+	if (!i.match(/.+@.+\..+/)) {
+		console.error("Please make sure all of your emails are valid emails.");
+		process.exit(1);
+	}
+}
+
 new Session({
-	hostName: "FriendConnect Testing Instance",
-	worldName: "Hello World",
-	version: "1.19.21",
-	protocol: 544,
-	connectedPlayers: 0,
-	maxConnectedPlayers: 40,
+	hostName: process.env.HOSTNAME || "FriendConnect",
+	worldName: process.env.WORLD_NAME || "Message of the Day: Hello World",
+	// @ts-ignore
+	version: process.env.VERSION || package["version"],
+	protocol,
+	connectedPlayers,
+	maxConnectedPlayers,
+
 	ip: process.env.IP,
-	port: process.env.PORT,
-	log: true,
-	joinability: "joinable_by_friends",
-	connectionType: 6,
-	autoFriending: true,
+
+	port,
+	connectionType,
+
+	log,
+	//@ts-ignore
+	joinability: process.env.JOINABILITY || "joinable_by_friends",
+
+	autoFriending,
+
+	pingServerForInfo,
+
 	tokenPath: "./auth",
-	pingServerForInfo:true,
-	accounts: [process.env.EMAIL, process.env.EMAIL2],
-	constants: {
-		//gamemode: true,
-		//worldName: true,
-		//hostName: true,
-		//maxConnectedPlayers: true,
-		//protocol: true,
-		//version: true,
-		//connectedPlayers: true,
-	},
+	accounts,
+
+	constants,
 });
