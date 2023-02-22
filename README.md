@@ -30,15 +30,23 @@ If you want to be notified when any changes occur to this project, you can join 
 
 ## How to use it:
 
-### Standalone
-
-You can download this repository and edit the .env file to use this tool standalone. 
+If you are using this standalone or via npm you will need to have at least node 18.2 installed with npm.
 
 ### Pterodactyl 
 
 If you use Pterodactyl Panel you can refer to
 https://github.com/Androecia/FriendConnect-Pterodactyl for the official egg.
 You'll still want to read below so you understand what certain variables do and are as informed as possible.
+
+
+
+
+
+
+
+### Standalone
+
+You can download this repository and edit the .env file to use this tool standalone. 
 
 ### As an NPM library
 ```tty
