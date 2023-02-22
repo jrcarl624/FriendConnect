@@ -1,4 +1,9 @@
 import { Session } from "../dist/index.js";
+import { config } from "dotenv";
+
+if (process.env.USE_DOTENV !== "false") {
+	config();
+}
 
 
 // check if the env for port, ip, protocol, and accounts are set if not error
