@@ -39,10 +39,6 @@ if (process.env.CONNECTION_TYPE) {
 	connectionType = parseInt(process.env.CONNECTION_TYPE);
 }
 
-import fs from "fs";
-
-//@ts-ignore
-let package = JSON.parse(fs.readFileSync("./package.json").toString());
 
 let autoFriending = true;
 
@@ -141,11 +137,35 @@ for (let i of accounts) {
 	}
 }
 
+// log all the variables
+
+console.log(`
+IP: ${process.env.IP}
+PORT: ${port}
+PROTOCOL: ${protocol}
+ACCOUNTS: ${accounts}
+MAX_CONNECTED_PLAYERS: ${maxConnectedPlayers}
+CONNECTED_PLAYERS: ${connectedPlayers}
+CONNECTION_TYPE: ${connectionType}
+AUTO_FRIENDING: ${autoFriending}
+PING_SERVER_FOR_INFO: ${pingServerForInfo}
+LOG: ${log}
+CONSTANT_WORLD_NAME: ${constantWorldName}
+CONSTANT_HOST_NAME: ${constantHostName}
+CONSTANT_MAX_CONNECTED_PLAYERS: ${constantMaxConnectedPlayers}
+CONSTANT_CONNECTED_PLAYERS: ${constantConnectedPlayers}
+CONSTANT_PROTOCOL: ${constantProtocol}
+CONSTANT_VERSION: ${constantVersion}
+ACC_LIMIT: ${accLimit}
+`);
+
+// create the session
+
 new Session({
 	hostName: process.env.HOSTNAME || "FriendConnect",
 	worldName: process.env.WORLD_NAME || "Message of the Day: Hello World",
-	// @ts-ignore
-	version: process.env.VERSION || package["version"],
+
+	version: process.env.VERSION || "Version",
 	protocol,
 	connectedPlayers,
 	maxConnectedPlayers,
