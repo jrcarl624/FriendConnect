@@ -1,5 +1,7 @@
 # FriendConnect
- 
+## UPDATE
+
+We are working on a rust port to solve the issues that have occurred, please be patient. Thank you
 ## WARNING
 
 **BEFORE YOU USE THIS TOOL, PLEASE READ THE FOLLOWING:
