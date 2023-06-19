@@ -1,7 +1,7 @@
 import { Session } from "../dist/index.js";
 import { config } from "dotenv";
 
-if (process.env.USE_DOTENV !== "false") {
+if (process.env.USE_DOTENV === "true") {
 	config();
 }
 
