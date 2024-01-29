@@ -40,12 +40,6 @@ If you use Pterodactyl Panel you can refer to
 https://github.com/Androecia/FriendConnect-Pterodactyl for the official egg.
 You'll still want to read below so you understand what certain variables do and are as informed as possible.
 
-
-
-
-
-
-
 ### Standalone
 
 You can download this repository and edit the `.env` file to use this tool standalone. The process is pretty straight forward and only requires a couple of steps to get going.
@@ -53,6 +47,8 @@ You can download this repository and edit the `.env` file to use this tool stand
 Step 1: Clone the repo, or download the repos files as a `zip` archive
 
 ![Github Download](./img/GithubDL.PNG)
+
+Unzip the archive and/or navigate to the root directory of the tool.
 
 Step 2: Make sure you are on node version 18
 
@@ -105,7 +101,7 @@ new Session({
 });
 ```
 
-Step 4: Run the following commadn in your terminal and include the absolute path for your `index.js` file
+Step 4: Run the following command in your terminal and include the absolute path for your `index.js` file
 
 ```tty
 $ node --es-module-specifier-resolution=node  --experimental-fetch ./path/to/file.js
@@ -125,7 +121,7 @@ Step 7: Output should be relatively normal, assuming you actually have a server 
 
 If this happens, double check your server IP and ensure your ports are forwarded propely `19132` and `19133`.
 
-Congradulations! You are all set to use the Friend-Connect Tool!
+Congratulations! You are all set to use the Friend-Connect Tool!
 
 ### As an NPM library
 ```tty
