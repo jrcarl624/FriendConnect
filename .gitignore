@@ -8,3 +8,4 @@ temp/
 *.env
 *.log
 *.vscode
+renovate.json
