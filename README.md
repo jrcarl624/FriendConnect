@@ -62,12 +62,6 @@ nvm use 18
 nvm alias default 18
 ```
 
-Make sure you also install `friend-connect` as an npm package to avoid the issue of `MODULE_NOT_FOUND`
-
-```tty
-npm install friend-connect
-```
-
 Step 3: Generate an `index.js` file to setup a default Friend-Connect configuration, and place it into the main directory
 
 ```js
