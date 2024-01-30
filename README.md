@@ -40,15 +40,88 @@ If you use Pterodactyl Panel you can refer to
 https://github.com/Androecia/FriendConnect-Pterodactyl for the official egg.
 You'll still want to read below so you understand what certain variables do and are as informed as possible.
 
-
-
-
-
-
-
 ### Standalone
 
-You can download this repository and edit the .env file to use this tool standalone. 
+You can download this repository and edit the `.env` file to use this tool standalone. The process is pretty straight forward and only requires a couple of steps to get going.
+
+Step 1: Clone the repo, or download the repos files as a `zip` archive
+
+![Github Download](./img/GithubDL.PNG)
+
+Unzip the archive and/or navigate to the root directory of the tool.
+
+Step 2: Make sure you are on node version 18
+
+![Node v18](./img/node18.PNG)
+
+> **Note:** Unless you have downloaded this verson of node. You may need to install `NVM` (node version manager) to setup an alias in you `bashrc` or `zshrc` file to change the version to node 18.
+
+```tty
+$ nvm install 18
+$ nvm use 18
+$ nvm alias default 18
+```
+
+Step 3: Generate an `index.js` file to setup a default Friend-Connect configuration, and place it into the main directory
+
+```js
+import { Session } from "friend-connect";
+
+new Session({
+	hostName: "Server Name", // The hostname of the server
+	worldName: "Message of the Day: Hello World", // Use as a MOTD
+	version: "1.19.60", // The version of the session, this can be any string.
+
+	protocol: 565, //The protocol of the server you are connecting to.
+
+	connectedPlayers: 0, // Used as a fallback if pinging the server fails.
+	maxConnectedPlayers: 40, // Used as a fallback if pinging the server fails.
+
+	ip: "tailvile.xyz", // The ip of the server you are using.
+	port: 19132, // The port of the server you are using.
+	connectionType: 6, // I don't recommend changing this.
+
+	log: true, // If you want to see the console output set to true.
+	joinability: "joinable_by_friends", // The joinability of the session, if this is changed only one account can be used to connect to the session.
+	autoFriending: true, // Set this to true if you want to automatically add people who follow the accounts.
+	pingServerForInfo: true, // If FriendConnect keeps erroring out due to a rakNet ping error you can set this to false.
+
+	tokenPath: "./auth", // The path to the directory that contains the authentication tokens.
+	accounts: ["foo@example.com", "bar@example.com"], // A list of emails that correspond to accounts you want to use with FriendConnect.
+
+	//These are values retrieved from the server on when the server advertisement is fetched, if true it will use a value from above.
+	constants: {
+		//worldName: true,
+		//hostName: true,
+		maxConnectedPlayers: true,
+		connectedPlayers: true,
+		//protocol: true,
+		version: true,
+	},
+});
+```
+
+Step 4: Run the following command in your terminal and include the absolute path for your `index.js` file
+
+```tty
+$ node --es-module-specifier-resolution=node  --experimental-fetch ./path/to/file.js
+```
+
+Step 5: If all goes well you should be greeted with this output
+
+![First Startup](./img/OutputGood.PNG)
+
+Step 6: Navigate to `https://www.microsoft.com/link` and enter the auth code given to you in the output. This will link the xbox live account to the Friend-Connect tool.
+
+![Microsoft Auth](./img/Authenticate.PNG)
+
+Step 7: Output should be relatively normal, assuming you actually have a server running that the program can ping, if not, there will be an error showing that the ping timed out.
+
+![Ping Timeout](./img/OutputBad.PNG)
+
+If this happens, double check your server IP and ensure your ports are forwarded propely `19132` and `19133`.
+
+Congratulations! You are all set to use the Friend-Connect Tool!
 
 ### As an NPM library
 ```tty
