@@ -57,9 +57,15 @@ Step 2: Make sure you are on node version 18
 > **Note:** Unless you have downloaded this verson of node. You may need to install `NVM` (node version manager) to setup an alias in you `bashrc` or `zshrc` file to change the version to node 18.
 
 ```tty
-$ nvm install 18
-$ nvm use 18
-$ nvm alias default 18
+nvm install 18
+nvm use 18
+nvm alias default 18
+```
+
+Make sure you also install `friend-connect` as an npm package to avoid the issue of `MODULE_NOT_FOUND`
+
+```tty
+npm install friend-connect
 ```
 
 Step 3: Generate an `index.js` file to setup a default Friend-Connect configuration, and place it into the main directory
@@ -104,7 +110,7 @@ new Session({
 Step 4: Run the following command in your terminal and include the absolute path for your `index.js` file
 
 ```tty
-$ node --es-module-specifier-resolution=node  --experimental-fetch ./path/to/file.js
+node --es-module-specifier-resolution=node  --experimental-fetch ./path/to/file.js
 ```
 
 Step 5: If all goes well you should be greeted with this output
@@ -125,7 +131,7 @@ Congratulations! You are all set to use the Friend-Connect Tool!
 
 ### As an NPM library
 ```tty
-$ npm install friend-connect
+npm install friend-connect
 ```
 
 Create a file and name it whatever you want.
