@@ -33,6 +33,7 @@
   "devDependencies": {
     "@types/node": "^18.0.0",
     "@types/websocket": "^1.0.5",
-    "ts-node": "^10.8.1"
+    "ts-node": "^10.8.1",
+    "friend-connect": "^0.7.6"
   }
 }

@@ -9,3 +9,4 @@ temp/
 *.log
 *.vscode
 renovate.json
+index.js
