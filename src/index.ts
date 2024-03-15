@@ -15,6 +15,10 @@ const Constants = {
 	CLIENT_ID: "00000000441cc96b", // Nintendo Switch Title ID
 };
 
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 const debug = (...args: any[]) => {
 	if (process.env.FRIEND_CONNECT_DEBUG) {
 		for (let i of args) {
@@ -193,7 +197,7 @@ class Session extends EventEmitter {
 		if (options.autoFriending) this.additionalOptions.autoFriending = true;
 		this.additionalOptions.constants =
 			options.constants || ({} as SessionOptionsConstants);
-		this.getAdvertisement();
+		this.getAdvertisement(options.ip, options.port);
 
 		if (!/.[\/]?[a-zA-Z0-9]+[\/]?/.test(options.tokenPath))
 			throw new Error("`tokenPath` is invalid, use ./auth/ for example");
@@ -267,7 +271,7 @@ class Session extends EventEmitter {
 				);
 			setInterval(() => {
 				if (this.additionalOptions.pingServerForInfo)
-					this.getAdvertisement();
+					this.getAdvertisement(options.ip, options.port);
 			}, 15000);
 			//debug(request);
 			this.#sessionInstance = new RTAMultiplayerSession(
@@ -616,11 +620,12 @@ class Session extends EventEmitter {
 			}, 15000);
 		}
 	}
-	async getAdvertisement(): Promise<void> {
+	async getAdvertisement(ip, port): Promise<void> {
 		try {
+			await delay(2000); // Wait to ping the server
 			let info = await ping({
-				host: this.#ip,
-				port: parseInt(`${this.#port}`),
+				host: ip,
+				port: port,
 			});
 			if (!this.additionalOptions.constants.gamemode)
 				this.minecraftLobbyCustomOptions.worldType = info.gamemode;
