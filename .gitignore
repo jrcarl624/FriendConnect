@@ -10,3 +10,4 @@ temp/
 *.vscode
 renovate.json
 index.js
+package-lock.json
