@@ -8,7 +8,8 @@
     "build": "tsc",
     "test": "node --es-module-specifier-resolution=node --experimental-fetch ./test/index.js",
     "test-n-build": "npm run build && npm run test",
-    "publish": "npm run build && npm publish --access public "
+    "publish": "npm run build && npm publish --access public",
+    "start": "node --es-module-specifier-resolution=node  --experimental-fetch ./index.js"
   },
   "author": "minerj101",
   "license": "MIT",
