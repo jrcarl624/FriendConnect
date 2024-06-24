@@ -17,14 +17,14 @@ let accounts = process.env.ACCOUNTS.split(",");
 
 let maxConnectedPlayers = 40;
 
-if (process.env.CONNECTED_PLAYERS) {
-	maxConnectedPlayers = parseInt(process.env.CONNECTED_PLAYERS);
+if (process.env.MAX_CONNECTED_PLAYERS) {
+	maxConnectedPlayers = parseInt(process.env.MAX_CONNECTED_PLAYERS);
 }
 
 let connectedPlayers = 0;
 
-if (process.env.MAX_CONNECTED_PLAYERS) {
-	connectedPlayers = parseInt(process.env.MAX_CONNECTED_PLAYERS);
+if (process.env.CONNECTED_PLAYERS) {
+	connectedPlayers = parseInt(process.env.CONNECTED_PLAYERS);
 }
 
 let port = 19132;
