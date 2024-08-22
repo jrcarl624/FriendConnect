@@ -1,5 +1,5 @@
 import { createHash } from "prismarine-auth/src/common/Util.js";
-import Achievements from "./modules/achievements";
+import Achievements from "./modules/achievements.js";
 import { LiveCache, MsaResponse, UserIdentifier, XboxLiveToken } from "./types";
 import authPkg from "prismarine-auth";
 const { Authflow } = authPkg;
@@ -7,9 +7,9 @@ import fs from "fs";
 import EventEmitter from "events";
 import uniRest from "unirest";
 
-import SessionDirectory from "./modules/sessionDirectory";
-import Social from "./modules/social";
-import PeopleHub from "./modules/peopleHub";
+import SessionDirectory from "./modules/sessionDirectory.js";
+import Social from "./modules/social.js";
+import PeopleHub from "./modules/peopleHub.js";
 
 interface XboxLiveTokenProvider {
 	userXuid: string;
