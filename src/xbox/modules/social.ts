@@ -1,6 +1,6 @@
 import { XboxClient } from "../index";
 import { UserIdentifier } from "../types";
-import { parseIdentifier } from "../utils/index";
+import { parseIdentifier } from "../utils/index.js";
 import { Person, PersonSummary, PeopleList } from "../xboxRestTypes";
 
 export default class Social {

@@ -138,9 +138,9 @@ interface MinecraftLobbyCustomProperties {
 	protocol: number;
 	version: string;
 }
-import { XboxClient, LinkCodeTokenProvider } from "./xbox";
-import { RTAMultiplayerSession } from "./xbox/modules/rta";
-import { PeopleList } from "./xbox/modules/peopleHub";
+import { XboxClient, LinkCodeTokenProvider } from "./xbox/index.js";
+import { RTAMultiplayerSession } from "./xbox/modules/rta.js";
+import { PeopleList } from "./xbox/modules/peopleHub.js";
 
 //TODO add events to the social class the emits friendAdded on response so there is no duplicateEvents same for other events. also clean up the code for the xbox live client so it returns the values instead of a response
 class Session extends EventEmitter {
@@ -628,7 +628,7 @@ class Session extends EventEmitter {
 				port: port,
 			});
 			if (!this.additionalOptions.constants.gamemode)
-				this.minecraftLobbyCustomOptions.worldType = info.gamemode;
+				this.minecraftLobbyCustomOptions.worldType = info.gamemodeId.toString();
 			if (!this.additionalOptions.constants.worldName)
 				//@ts-ignore
 				this.minecraftLobbyCustomOptions.worldName = info.levelName;

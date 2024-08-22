@@ -1,7 +1,7 @@
 import { XboxClient } from "..";
 import { GUID, UserIdentifier } from "../types";
 import { Achievement } from "../xboxRestTypes";
-import { parseIdentifier } from "../utils";
+import { parseIdentifier } from "../utils/index.js";
 interface TitleHistoryQueryStringParameters {
 	/**
 	 * Return items beginning after the given number of items. For example, skipItems="3" will retrieve items beginning with the fourth item retrieved.

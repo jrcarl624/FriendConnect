@@ -66,7 +66,7 @@ export interface PeopleList {
 
 import { XboxClient } from "../";
 import { UserIdentifier } from "../types";
-import { parseIdentifier } from "../utils";
+import { parseIdentifier } from "../utils/index.js";
 export default class PeopleHub {
 	private readonly xbox: XboxClient;
 	static readonly uri: string = "https://peoplehub.xboxlive.com";
