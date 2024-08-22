@@ -50,22 +50,25 @@ Step 1: Clone the repo, or download the repos files as a `zip` archive
 
 Unzip the archive and/or navigate to the root directory of the tool.
 
-Step 2: Make sure you are on node version 18
+Step 2: Make sure you are on node version v20
 
-![Node v18](./img/node18.PNG)
+![Node v18](./img/node20.PNG)
 
-> **Note:** Unless you have downloaded this verson of node. You may need to install `NVM` (node version manager) to setup an alias in you `bashrc` or `zshrc` file to change the version to node 18.
+> **Note:** Unless you have downloaded this verson of node. You may need to install `NVM` (node version manager) to setup an alias in you `bashrc` or `zshrc` file to change the version to node 20.
 
 ```tty
-nvm install 18
-nvm use 18
-nvm alias default 18
+nvm install v20
+nvm use v20
+nvm alias default v20
 ```
 
-Step 3: Generate an `index.js` file to setup a default Friend-Connect configuration, and place it into the main directory
+> **Note:** You will need to find out how to install NodeJS on your current system, `Windows` and `Mac` users use a different process that can be found here [NodeJS Documentation](https://nodejs.org/en/download/package-manager)
+
+Step 3: Generate an `index.js` file to setup a default Friend-Connect configuration, and place it into the root directory
 
 ```js
-import { Session } from "friend-connect";
+//import { Session } from "friend-connect";
+import { Session } from "./dist/index.js";
 
 new Session({
 	hostName: "Server Name", // The hostname of the server
@@ -101,10 +104,18 @@ new Session({
 });
 ```
 
-Step 4: Run the following command in your terminal and include the absolute path for your `index.js` file
+> **Note:** Since the npm package isn't always up to date, and no workflow exist for Continuous Integration for deployment, it is only possible to run this program locally for the time being. That is why there is a comment at the top of the file.
+
+Step 4: While in the root directory of the project, run this command to compile the Typescript
 
 ```tty
-node --es-module-specifier-resolution=node  --experimental-fetch ./path/to/file.js
+npm run build
+```
+
+Step 5: Once Typescript compiles sucsessfully, run this command to start the program
+
+```tty
+npm start
 ```
 
 Step 5: If all goes well you should be greeted with this output
@@ -123,7 +134,7 @@ If this happens, double check your server IP and ensure your ports are forwarded
 
 Congratulations! You are all set to use the Friend-Connect Tool!
 
-### As an NPM library
+### As an NPM library (NOT WORKING ATTEMPT AT YOUR OWN RISK)
 ```tty
 npm install friend-connect
 ```
