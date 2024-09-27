@@ -2,6 +2,22 @@
 ## UPDATE
 
 We are working on a rust port to solve the issues that have occurred, please be patient. Thank you
+
+<table>
+<tr>
+<td><img src="https://www.pngall.com/wp-content/uploads/8/Red-Warning-PNG-Free-Download.png" width="100"></td>
+<td align="center" bgcolor="#FFFF00">
+
+# WARNING
+
+**For now, this software no longer works with the latest versions<br>
+of Minecraft Bedrock Edition.**
+
+</td>
+<td><img src="https://www.pngall.com/wp-content/uploads/8/Red-Warning-PNG-Free-Download.png" width="100"></td>
+</tr>
+</table>
+
 ## WARNING
 
 **BEFORE YOU USE THIS TOOL, PLEASE READ THE FOLLOWING:
