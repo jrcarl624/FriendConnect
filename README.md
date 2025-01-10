@@ -1,7 +1,6 @@
 # FriendConnect
 ## UPDATE
 
-We are working on a rust port to solve the issues that have occurred, please be patient. Thank you
 
 <table>
 <tr>
